@@ -17,7 +17,7 @@ Source lives in `src/` as ESM JavaScript with JSDoc types; `types/` is generated
 - Use public Vitest and Jest reporter and CLI APIs, not internal imports.
 - Pass Vitest files as absolute paths before any options, never after `--`, and verify that a shard measured exactly its assigned files.
 - Workflows run the caller's installed CLI with `npx --no-install`; keep third-party actions pinned by commit and pass inputs to scripts through environment variables, never by interpolating them into commands.
-- Keep `TESTLANES_VERSION` in `testlanes.yml` and `action.yml` equal to the package version, and the README install, workflow, and action pins on the latest released version; `npr.config.js` updates both during releases. Keep one reusable workflow selected by its `framework` input rather than per-framework wrappers.
+- Keep `TESTLANES_VERSION` in `action.yml` equal to the package version, and the README install, workflow, and action pins on the latest released version; `npr.config.js` updates both during releases. The reusable workflow carries no version, and release references must never name files under `.github/workflows/`, which the release workflow's `GITHUB_TOKEN` cannot push. Keep one reusable workflow selected by its `framework` input rather than per-framework wrappers.
 - Error and help messages are full sentences ending with periods.
 
 ## Setup and Validation

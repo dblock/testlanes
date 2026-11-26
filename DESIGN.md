@@ -22,7 +22,7 @@ The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types duri
 | `testlanes.yml` | Reusable workflow running Prepare, Test, and Collect jobs for the framework selected by its required `framework` input. |
 | `action.yml` | Standalone composite action that runs `testlanes plan` and outputs a file matrix. |
 
-Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. `testlanes.yml` and `action.yml` declare `TESTLANES_VERSION`, and planning fails when it differs from the installed package version.
+Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. The reusable workflow carries no version: callers pin its tag and install the matching `testlanes`, and it runs the installed version, so keeping the two matched is the caller's responsibility. Release references never edit `.github/workflows/`, which the release workflow's `GITHUB_TOKEN` cannot push. `action.yml` declares `TESTLANES_VERSION`, and planning fails when it differs from the installed package version.
 
 ## File Selection
 
