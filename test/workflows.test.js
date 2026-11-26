@@ -9,20 +9,13 @@ import { root } from "./support.js";
 const read = (path) => readFile(join(root, path), "utf8");
 
 test("workflow and action versions match the package version", async () => {
-  for (const path of [".github/workflows/lanes.yml", "action.yml"]) {
+  for (const path of [".github/workflows/testlanes.yml", "action.yml"]) {
     assert.match(await read(path), new RegExp(`TESTLANES_VERSION: ${version.replaceAll(".", "\\.")}\\n`, "u"), path);
   }
 });
 
-test("framework workflows forward every shared input", async () => {
-  const lanes = await read(".github/workflows/lanes.yml");
-  const inputs = [...lanes.split("\njobs:")[0].matchAll(/^ {6}([a-z-]+):\n {8}description:/gmu)].map((match) => match[1]).filter((name) => name !== "framework");
-  for (const [path, name] of [[".github/workflows/vitest.yml", "vitest"], [".github/workflows/jest.yml", "jest"], [".github/workflows/node.yml", "node"]]) {
-    const text = await read(path);
-    assert.match(text, new RegExp(`framework: ${name}\\n`, "u"));
-    for (const input of inputs) {
-      assert.match(text, new RegExp(`\\n {6}${input}:\\n {8}description:`, "u"), `${path} declares ${input}`);
-      assert.match(text, new RegExp(`\\n {6}${input}: \\$\\{\\{ inputs\\.${input} \\}\\}\\n`, "u"), `${path} forwards ${input}`);
-    }
-  }
+test("the reusable workflow requires a framework and defaults the artifact prefix", async () => {
+  const workflow = await read(".github/workflows/testlanes.yml");
+  assert.match(workflow, /\n {6}framework:\n {8}description: Test framework, either vitest, jest, or node\.\n {8}type: string\n {8}required: true\n/u);
+  assert.match(workflow, /\n {6}artifact-prefix:\n(?: {8}.+\n)*? {8}default: testlanes\n/u);
 });

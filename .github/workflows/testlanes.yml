@@ -1,4 +1,4 @@
-name: Test Lanes
+name: testlanes
 
 on:
   workflow_call:
@@ -58,7 +58,7 @@ on:
       artifact-prefix:
         description: Unique artifact name prefix when calling this workflow more than once.
         type: string
-        required: true
+        default: testlanes
       artifact-retention-days:
         description: Retention for plans and shard results (0 uses repository default).
         type: number

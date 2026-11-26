@@ -12,8 +12,9 @@ permissions:
 jobs:
   vitest:
     name: Exercise Vitest Workflow
-    uses: ./.github/workflows/vitest.yml
+    uses: ./.github/workflows/testlanes.yml
     with:
+      framework: vitest
       working-directory: fixtures/vitest
       install-command: npm ci --prefix ../.. && npm ci
       shards: 2
@@ -21,8 +22,9 @@ jobs:
 
   jest:
     name: Exercise Jest Workflow
-    uses: ./.github/workflows/jest.yml
+    uses: ./.github/workflows/testlanes.yml
     with:
+      framework: jest
       working-directory: fixtures/jest
       install-command: npm ci --prefix ../.. && npm ci
       shards: 3
@@ -31,8 +33,9 @@ jobs:
 
   node:
     name: Exercise node:test Workflow
-    uses: ./.github/workflows/node.yml
+    uses: ./.github/workflows/testlanes.yml
     with:
+      framework: node
       working-directory: fixtures/node
       install-command: npm ci --prefix ../.. && npm ci
       shards: 2
@@ -47,7 +50,7 @@ jobs:
         entry:
           - { framework: vitest, runner: macos-latest, kernel: Darwin, pattern: 'specs/*.spec.js' }
           - { framework: jest, runner: '["ubuntu-latest"]', kernel: Linux, pattern: '' }
-    uses: ./.github/workflows/lanes.yml
+    uses: ./.github/workflows/testlanes.yml
     with:
       framework: ${{ matrix.entry.framework }}
       runs-on: ${{ matrix.entry.runner }}
