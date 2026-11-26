@@ -1,0 +1,54 @@
+name: testlanes Shard Matrix
+description: Assign Vitest or Jest files to GitHub Actions matrix jobs using file sizes or past runtimes.
+branding:
+  icon: grid
+  color: green
+inputs:
+  framework:
+    description: Test framework, either vitest or jest.
+    default: vitest
+  working-directory:
+    description: Directory containing the project's package.json.
+    default: .
+  pattern:
+    description: Glob selecting test files relative to the working directory; empty uses the framework's own listing.
+    default: ''
+  shards:
+    description: Maximum number of shards, from 1 to 256.
+    default: '4'
+  timings:
+    description: Optional path to a testlanes timing JSON file, relative to the working directory.
+    default: ''
+  group-by:
+    description: Group by auto, filesize, or runtime.
+    default: auto
+  test-args:
+    description: JSON array of additional framework arguments used for listing tests.
+    default: '[]'
+outputs:
+  matrix:
+    description: JSON array of entries with a shard number and its assigned file paths.
+    value: ${{ steps.plan.outputs.matrix }}
+  group-by:
+    description: Grouping method, either filesize or runtime.
+    value: ${{ steps.plan.outputs.group-by }}
+runs:
+  using: composite
+  steps:
+    - name: Plan Test Shards
+      id: plan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        # Updated by each release so plans fail when the caller's package version differs.
+        TESTLANES_VERSION: 0.1.0
+        FRAMEWORK: ${{ inputs.framework }}
+        PATTERN: ${{ inputs.pattern }}
+        SHARDS: ${{ inputs.shards }}
+        TIMINGS: ${{ inputs.timings }}
+        GROUP_BY: ${{ inputs.group-by }}
+        TEST_ARGS: ${{ inputs.test-args }}
+      run: >-
+        npx --no-install testlanes plan --framework "$FRAMEWORK" --shards "$SHARDS" --group-by "$GROUP_BY"
+        --pattern "$PATTERN" --timings "$TIMINGS" --test-args "$TEST_ARGS" --matrix files
+        --expect-version "$TESTLANES_VERSION"

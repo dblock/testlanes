@@ -10,15 +10,15 @@ permissions:
 
 jobs:
   test:
-    name: Test on Node ${{ matrix.entry.node }}
+    name: Test on Node ${{ matrix.entry.node }} with Vitest ${{ matrix.entry.vitest }} and Jest ${{ matrix.entry.jest }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         entry:
-          - { node: "22.12.0" }
-          - { node: "24.22.3" }
-          - { node: "26.13.1" }
+          - { node: "22.12.0", vitest: "3.2.7", jest: "29.7.0" }
+          - { node: "24.22.3", vitest: "4.1.12", jest: "30.5.2" }
+          - { node: "26.13.1", vitest: "5.1.2", jest: "30.5.2" }
     steps:
       - name: Check Out Source
         uses: actions/checkout@v7.0.1
@@ -31,6 +31,8 @@ jobs:
           cache: npm
       - name: Install Dependencies
         run: npm ci
+      - name: Select Vitest and Jest Versions
+        run: npm install --no-save --package-lock=false vitest@${{ matrix.entry.vitest }} jest@${{ matrix.entry.jest }}
       - name: Run Tests
         run: npm test
 

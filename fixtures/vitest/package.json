@@ -1,0 +1,9 @@
+{
+  "name": "testlanes-vitest-fixture",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "testlanes": "file:../..",
+    "vitest": "5.1.2"
+  }
+}

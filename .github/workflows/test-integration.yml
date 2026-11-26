@@ -1,0 +1,56 @@
+name: Test Workflow Integration
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  vitest:
+    name: Exercise Vitest Workflow
+    uses: ./.github/workflows/vitest.yml
+    with:
+      working-directory: fixtures/vitest
+      install-command: npm ci --prefix ../.. && npm ci
+      shards: 2
+      artifact-prefix: integration-vitest
+
+  jest:
+    name: Exercise Jest Workflow
+    uses: ./.github/workflows/jest.yml
+    with:
+      working-directory: fixtures/jest
+      install-command: npm ci --prefix ../.. && npm ci
+      shards: 3
+      test-args: '["--ci"]'
+      artifact-prefix: integration-jest
+
+  configuration:
+    name: Exercise Configuration (${{ matrix.entry.framework }}, ${{ matrix.entry.kernel }})
+    strategy:
+      fail-fast: false
+      matrix:
+        entry:
+          - { framework: vitest, runner: macos-latest, kernel: Darwin, pattern: 'specs/*.spec.js' }
+          - { framework: jest, runner: '["ubuntu-latest"]', kernel: Linux, pattern: '' }
+    uses: ./.github/workflows/lanes.yml
+    with:
+      framework: ${{ matrix.entry.framework }}
+      runs-on: ${{ matrix.entry.runner }}
+      timeout-minutes: 15
+      max-parallel: 1
+      fail-fast: true
+      node-version: '24.22.3'
+      working-directory: fixtures/${{ matrix.entry.framework }}
+      install-command: npm ci --prefix ../.. && npm ci
+      setup: test "$(uname -s)" = "${{ matrix.entry.kernel }}" && test "$(node --version)" = v24.22.3
+      group-by: filesize
+      shards: 2
+      pattern: ${{ matrix.entry.pattern }}
+      artifact-prefix: integration-configuration-${{ matrix.entry.framework }}-${{ matrix.entry.kernel }}
+      artifact-retention-days: 1
+      timings-retention-days: 1

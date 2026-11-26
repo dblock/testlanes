@@ -24,7 +24,16 @@ Test, Lint, and Package are separate GitHub Actions workflows with least-privile
 
 ## Tests
 
-Tests live in `test/` and use `node --test`. `test/package.test.js` packs the real archive with `npm pack`, checks its exact file list, installs it in a temporary consumer, and imports the public entry point. Set `PACKAGE_ARCHIVE` to validate an existing archive instead; an empty value packs a fresh one.
+Tests live in `test/` and use `node --test`.
+
+- `test/core.test.js` covers paths, timings, partitioning, plans, and runner adapters.
+- `test/cli.test.js` runs the real CLI as a subprocess against temporary copies of `fixtures/vitest` and `fixtures/jest`, which resolve the repository's installed Vitest and Jest, covering the full plan, run, and collect lifecycle, failing tests, changed files, Vitest's substring file filters, and error messages.
+- `test/collect.test.js` covers retries, duplicate and unassigned reports, and fingerprints.
+- `test/github.test.js` serves the GitHub REST API from a local HTTP server.
+- `test/reporters.test.js` and `test/workflows.test.js` cover the reporters, the workflow and action `TESTLANES_VERSION`, and input forwarding.
+- `test/package.test.js` packs the real archive with `npm pack`, checks its exact file list, installs it in a temporary consumer, and runs its CLI and entry points. Set `PACKAGE_ARCHIVE` to validate an existing archive instead; an empty value packs a fresh one.
+
+Fixture specs use `.spec.js` names outside `test/` so `node --test` does not run them. CI selects Vitest and Jest versions per Node.js version with `npm install --no-save`, covering Vitest 3, 4, and 5 and Jest 29 and 30. The Test Workflow Integration and Test Standalone Action workflows call the reusable workflows and standalone action from this repository against the fixtures on Linux and macOS; they install the repository with `npm ci --prefix ../..` because the fixtures depend on it through `file:../..`. Check workflows locally with [actionlint](https://github.com/rhysd/actionlint).
 
 Add focused behavioral tests for new or fixed behavior, including errors and edge cases, and prefer real Vitest and Jest subprocesses and installed-consumer fixtures over mocks. Aim for coverage close to 100% of runtime code, inspect line and branch coverage with `npm run test:coverage`, and report gaps rather than adding trivial assertions or excluding real code.
 
@@ -34,4 +43,4 @@ Work on a `<username>/<topic>` topic branch, such as `dblock/implementation`, in
 
 Update affected documentation. Add a CHANGELOG entry for features, improvements, and fixes, but not minor typos, as `- [#123](https://github.com/dblock/testlanes/pull/123): Description - [@username](https://github.com/username).`, above `- Your contribution here.` in the Next section, oldest first. Verify the PR number after opening and correct the entry if needed.
 
-Features increment the minor version in the same PR, resetting patch while in `0.x`; keep an unreleased version unchanged. Synchronize `package.json` and `package-lock.json`. Use closing issue references, include an AI co-author trailer in AI-assisted commits, and disclose AI authorship in AI-written PR descriptions and comments. See [Releasing](RELEASING.md).
+Features increment the minor version in the same PR, resetting patch while in `0.x`; keep an unreleased version unchanged. Synchronize `package.json`, `package-lock.json`, and `TESTLANES_VERSION` in `.github/workflows/lanes.yml` and `action.yml`; `test/workflows.test.js` checks them. Use closing issue references, include an AI co-author trailer in AI-assisted commits, and disclose AI authorship in AI-written PR descriptions and comments. See [Releasing](RELEASING.md).
