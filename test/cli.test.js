@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -163,5 +163,21 @@ describe("command line", () => {
     const missing = cli(["plan", "--framework", "vitest", "--timings", "absent.json"], { cwd });
     assert.equal(missing.code, 0);
     assert.match(missing.stderr, /using filesize grouping/u);
+  });
+});
+
+describe("imported node:test modules", () => {
+  test("attributes tests defined in imported modules to the file that ran them", async () => {
+    const cwd = await project("node");
+    const work = await mkdtemp(join(tmpdir(), "testlanes-work-"));
+    await mkdir(join(cwd, "examples"));
+    await writeFile(join(cwd, "examples", "shared.test.js"), 'import { test } from "node:test";\ntest("shared", async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });\n');
+    await writeFile(join(cwd, "specs", "importer.test.js"), 'import "../examples/shared.test.js";\n');
+    assert.equal(cli(["plan", "--framework", "node", "--pattern", "specs/**/*.test.js", "--shards", "1", "--out", join(work, "plan")], { cwd }).code, 0);
+    const ran = cli(["run", "--plan", join(work, "plan"), "--shard", "1", "--out", join(work, "result")], { cwd });
+    assert.equal(ran.code, 0, ran.stderr);
+    const timings = JSON.parse(await readFile(join(work, "result", "timings.json"), "utf8"));
+    assert.ok(timings["specs/importer.test.js"] >= 0.02);
+    assert.ok(!Object.hasOwn(timings, "examples/shared.test.js"));
   });
 });
