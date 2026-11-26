@@ -62,3 +62,7 @@ Artifacts are named `<prefix>-plan-<attempt>`, `<prefix>-shard-<shard>-<attempt>
 ## Trust
 
 PRs, including forks, read history but never supply baselines. `testlanes history` looks through the current workflow's latest 20 successful default-branch push runs, keeps only same-repository push runs, and picks the newest unexpired `<prefix>-timings` artifact; lookup failures are warnings, not errors. Only Collect jobs of default-branch pushes publish baselines. Workflows use `contents: read` and `actions: read`, never execute artifacts, and never use `pull_request_target`. Unusable history is ignored with a warning.
+
+## Artwork
+
+The logo is original, AI-assisted, MIT-licensed artwork without third-party elements: four lanes of differently sized test blocks that all end at the same edge, like shards balanced by runtime. Its greens come from the Test badge, `#28A745` and `#34D058`, with a lighter `#85E89D` and a pale `#F3FBF5` background. `scripts/logo.js` generates `assets/logo.svg` from the lane definitions; edit the script, regenerate the asset with `npm run logo`, and commit both. `test/logo.test.js` checks that the committed asset matches the script and that every lane ends at the same edge. `.gitattributes` keeps SVG line endings stable across platforms.

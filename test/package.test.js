@@ -37,6 +37,7 @@ test("archive contains only the published files", () => {
     "package/DESIGN.md",
     "package/LICENSE",
     "package/README.md",
+    "package/assets/logo.svg",
     "package/bin/testlanes.js",
     "package/package.json",
     "package/src/cli.js",

@@ -39,6 +39,8 @@ Add focused behavioral tests for new or fixed behavior, including errors and edg
 
 ## Pull Requests
 
+For artwork changes, follow [Artwork](DESIGN.md#artwork): edit `scripts/logo.js`, run `npm run logo`, and check the full-size SVG and the 160-pixel README rendering.
+
 Work on a `<username>/<topic>` topic branch, such as `dblock/implementation`, in the main checkout; use a sibling worktree such as `../implementation` only for work that runs in parallel. Split multiple changes into small stacked PRs, each targeting the branch below it, and register stacks with `gh stack link`. Keep each PR to one coherent commit relative to its base, amend and update task-owned branches with `--force-with-lease`, and never force-push `master`. PRs are merged with rebase merges only; do not merge without approval.
 
 Update affected documentation. Add a CHANGELOG entry for features, improvements, and fixes, but not minor typos, as `- [#123](https://github.com/dblock/testlanes/pull/123): Description - [@username](https://github.com/username).`, above `- Your contribution here.` in the Next section, oldest first. Verify the PR number after opening and correct the entry if needed.

@@ -23,7 +23,7 @@ Source lives in `src/` as ESM JavaScript with JSDoc types; `types/` is generated
 
 Use Node.js `26.13.1` from `.nvmrc`. The package supports Node.js 22.12 or newer. Run `npm ci`, `npm test`, and `npm run lint` before every commit and push; `npm test` includes the packed-consumer suite, which `npm run package:check` runs alone. Inspect coverage with `npm run test:coverage` and aim close to 100% of runtime code with meaningful tests, preferring real Vitest and Jest subprocesses against `fixtures/`. Check workflows with `actionlint`. Verify current stable releases when updating dependencies or GitHub Actions.
 
-Keep Markdown paragraphs on one line, title-case Markdown headings and YAML display names, and add only reviewed words to `.spellcheck.txt`. Keep Test, Lint, and Package workflows separate, with explicit inline `matrix.entry` combinations and no `include` or `exclude`.
+Generate `assets/logo.svg` only with `npm run logo` from `scripts/logo.js`, keep it first in README at 160 pixels with descriptive alternative text, and keep it in the npm archive; see [Artwork](DESIGN.md#artwork). Keep Markdown paragraphs on one line, title-case Markdown headings and YAML display names, and add only reviewed words to `.spellcheck.txt`. Keep Test, Lint, and Package workflows separate, with explicit inline `matrix.entry` combinations and no `include` or `exclude`.
 
 ## Git and Pull Requests
 

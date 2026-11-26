@@ -26,6 +26,7 @@
     "bin/",
     "src/",
     "types/",
+    "assets/logo.svg",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -43,7 +44,8 @@
     "lint:markdown": "eslint --config eslint.config-markdown.js \"*.md\"",
     "types": "node -e \"require('node:fs').rmSync('types',{recursive:true,force:true})\" && tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir types",
     "prepack": "npm run types",
-    "package:check": "node --test test/package.test.js"
+    "package:check": "node --test test/package.test.js",
+    "logo": "node scripts/logo.js"
   },
   "dependencies": {
     "tinyglobby": "^0.2.17"
