@@ -29,6 +29,16 @@ jobs:
       test-args: '["--ci"]'
       artifact-prefix: integration-jest
 
+  node:
+    name: Exercise node:test Workflow
+    uses: ./.github/workflows/node.yml
+    with:
+      working-directory: fixtures/node
+      install-command: npm ci --prefix ../.. && npm ci
+      shards: 2
+      test-args: '["--test-concurrency=1"]'
+      artifact-prefix: integration-node
+
   configuration:
     name: Exercise Configuration (${{ matrix.entry.framework }}, ${{ matrix.entry.kernel }})
     strategy:

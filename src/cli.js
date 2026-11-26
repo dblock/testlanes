@@ -35,12 +35,12 @@ const commands = {
       matrix: { type: "string", default: "files" },
       "expect-version": { type: "string", default: "" },
     },
-    help: `Usage: testlanes plan --framework <vitest|jest> [options]
+    help: `Usage: testlanes plan --framework <vitest|jest|node> [options]
 
 Options:
   --shards <n>             Maximum number of shards, from 1 to 256 (default 4).
   --group-by <mode>        auto, filesize, or runtime (default auto).
-  --pattern <glob>         Select files with a glob instead of the framework's listing.
+  --pattern <glob>         Select files with a glob instead of the framework's listing or default patterns.
   --timings <file>         Timing history JSON; a missing file supplies no history.
   --test-args <json>       JSON array of extra framework arguments (default []).
   --out <directory>        Write plan.json to this directory.

@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       framework:
-        description: Test framework, either vitest or jest.
+        description: Test framework, either vitest, jest, or node.
         type: string
         required: true
       runs-on:

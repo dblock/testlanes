@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 import JestReporter from "../src/reporters/jest.js";
+import nodeReporter from "../src/reporters/node.js";
 import VitestReporter from "../src/reporters/vitest.js";
 
 describe("reporters", () => {
@@ -33,6 +34,26 @@ describe("reporters", () => {
     reporter.onRunComplete();
     assert.equal(reporter.getLastError(), undefined);
     assert.deepEqual(JSON.parse(await readFile(output, "utf8")), { "/r/a.js": 1.234, "/r/b.js": 0 });
+  });
+
+  test("node:test reporter prefers file-level durations and falls back to top-level tests", async () => {
+    const output = join(await mkdtemp(join(tmpdir(), "testlanes-reporter-")), "timings.json");
+    process.env.TESTLANES_TIMINGS = output;
+    const a = join(process.cwd(), "a.test.js");
+    const events = [
+      { type: "test:pass", data: { nesting: 0, file: a, name: "ignored", details: { duration_ms: 999 } } },
+      { type: "test:complete", data: { nesting: 0, file: a, name: "first", details: { duration_ms: 100 } } },
+      { type: "test:complete", data: { nesting: 1, file: a, name: "nested", details: { duration_ms: 999 } } },
+      { type: "test:complete", data: { nesting: 0, file: a, name: a, details: { duration_ms: 250 } } },
+      { type: "test:complete", data: { nesting: 0, file: "/r/b.test.js", name: "one", details: { duration_ms: 20 } } },
+      { type: "test:complete", data: { nesting: 0, file: "/r/b.test.js", name: "two" } },
+      { type: "test:complete", data: { nesting: 0, name: "no file", details: { duration_ms: 1 } } },
+      { type: "test:diagnostic", data: { message: "tests 3" } },
+    ];
+    const chunks = [];
+    for await (const chunk of nodeReporter((async function* () { yield* events; })())) chunks.push(chunk);
+    assert.deepEqual(chunks, []);
+    assert.deepEqual(JSON.parse(await readFile(output, "utf8")), { [a]: 0.25, "/r/b.test.js": 0.02 });
   });
 
   test("records nothing when TESTLANES_TIMINGS is unset", async () => {

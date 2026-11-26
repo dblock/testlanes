@@ -2,9 +2,9 @@
 
 ## Scope
 
-testlanes splits a Vitest or Jest suite into shards whose measured runtimes are balanced, runs them as GitHub Actions jobs, and keeps per-file timing history in GitHub Actions artifacts. It ports the design of [parallel_tests-ci](https://github.com/dblock/parallel_tests-ci) to JavaScript.
+testlanes splits a Vitest, Jest, or node:test suite into shards whose measured runtimes are balanced, runs them as GitHub Actions jobs, and keeps per-file timing history in GitHub Actions artifacts. It ports the design of [parallel_tests-ci](https://github.com/dblock/parallel_tests-ci) to JavaScript.
 
-It supports Vitest 3 through 5 and Jest 29 and 30 on GitHub Actions Linux and macOS runners. Non-goals are a hosted service, other CI providers, Windows runners, dynamic queue mode, automatic shard sizing, splitting tests within a file, Yarn Plug'n'Play, and browser end-to-end runners such as Playwright or Cypress. Worker-name templates, environment and secret inputs, extra artifact paths, and node:test support are planned follow-ups.
+It supports Vitest 3 through 5, Jest 29 and 30, and node:test on Node.js 22.12 or newer on GitHub Actions Linux and macOS runners. Non-goals are a hosted service, other CI providers, Windows runners, dynamic queue mode, automatic shard sizing, splitting tests within a file, Yarn Plug'n'Play, and browser end-to-end runners such as Playwright or Cypress. Worker-name templates, environment and secret inputs, and extra artifact paths are planned follow-ups.
 
 The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types during linting, and generated declarations ship in `types/` without a build step for runtime code. The only runtime dependency is [tinyglobby](https://github.com/SuperchupuDev/tinyglobby), for the optional `pattern`.
 
@@ -14,12 +14,13 @@ The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types duri
 | --- | --- |
 | `testlanes/vitest` reporter | Records each module's environment, preparation, collection, setup, and test time from `onTestModuleEnd` and writes it on `onTestRunEnd`. |
 | `testlanes/jest` reporter | Records each file's `perfStats.runtime` from `onTestResult` and writes it on `onRunComplete`. |
+| `testlanes/node` reporter | Records each file's duration from the top-level `test:complete` event that `node --test` emits per file, falling back to the sum of the file's top-level tests. |
 | `testlanes plan` | Selects files, chooses a grouping, partitions them, writes `plan.json`, and outputs a matrix. |
 | `testlanes run` | Verifies the plan and runs one shard, writing `timings.json` and a `result.json` marker only on success. |
 | `testlanes collect` | Validates every shard's newest report and merges their timings into a baseline. |
 | `testlanes history` | Finds the newest trusted baseline artifact through the GitHub REST API. |
 | `lanes.yml` | Shared reusable workflow running Prepare, Test, and Collect jobs. |
-| `vitest.yml`, `jest.yml` | Reusable workflows that select their framework and forward every other input to `lanes.yml`. |
+| `vitest.yml`, `jest.yml`, `node.yml` | Reusable workflows that select their framework and forward every other input to `lanes.yml`. |
 | `action.yml` | Standalone composite action that runs `testlanes plan` and outputs a file matrix. |
 
 Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. `lanes.yml` and `action.yml` declare `TESTLANES_VERSION`, and planning fails when it differs from the installed package version.
@@ -28,7 +29,9 @@ Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which 
 
 Without `pattern`, files come from `vitest list --filesOnly --json` or `jest --listTests --json` with `test-args`, so the runner's configuration, projects, and filters apply. A `pattern` is a glob relative to the working directory. Selected paths must be normalized, relative, and inside the working directory; the plan records each file's size in bytes.
 
-Runners are located by walking up from the working directory to `node_modules/<runner>/package.json` and running its declared executable with the current Node.js. Vitest treats file arguments as substring filters and ignores those after `--`, so `run` passes absolute paths before any options. Jest's `--reporters` accepts several values, so files follow `--runTestsByPath --`. Both runners use their default reporter plus the testlanes reporter.
+node:test has no listing command, so without `pattern` testlanes globs the default `node --test` patterns outside `node_modules`, adding TypeScript extensions when `process.features.typescript` shows the running Node.js can strip types. Shards run `node --test` with the spec reporter on standard output and the testlanes reporter, whose destination stays empty because it writes its own file. The runner's environment omits `NODE_TEST_CONTEXT`, because a nested `node --test` that inherits it skips its files.
+
+Vitest and Jest are located by walking up from the working directory to `node_modules/<runner>/package.json` and running its declared executable with the current Node.js. Vitest treats file arguments as substring filters and ignores those after `--`, so `run` passes absolute paths before any options. Jest's `--reporters` accepts several values, so files follow `--runTestsByPath --`. Both runners use their default reporter plus the testlanes reporter.
 
 ## Partitioning
 

@@ -24,7 +24,7 @@ export default [
       "markdown-preferences/table-pipe-alignment": "off",
       "markdown-preferences/heading-casing": ["error", {
         style: "Title Case",
-        preserveWords: ["testlanes", "Vitest", "Jest", "GitHub", "CI", "npm", "API", "CLI"],
+        preserveWords: ["testlanes", "node:test", "Vitest", "Jest", "GitHub", "CI", "npm", "API", "CLI"],
       }],
       "paragraph/wrap": ["error", { width: "nowrap" }],
       "prose-spellcheck/spellcheck": ["error", {

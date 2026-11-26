@@ -1,0 +1,91 @@
+name: node:test Shards
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: Runner label or JSON array of labels for every job (Linux or macOS).
+        type: string
+        default: ubuntu-latest
+      timeout-minutes:
+        description: Positive integer timeout for each preparation, worker, and collection job.
+        type: number
+        default: 360
+      max-parallel:
+        description: Maximum concurrent workers (1-256), subject to runner availability.
+        type: number
+        default: 256
+      fail-fast:
+        description: Cancel queued and running workers when a worker fails.
+        type: boolean
+        default: false
+      node-version:
+        description: Node.js version (empty reads .nvmrc, .node-version, or package.json in the working directory).
+        type: string
+        default: ''
+      working-directory:
+        description: Directory containing the project's package.json, relative to the repository root.
+        type: string
+        default: .
+      install-command:
+        description: Shell command installing dependencies (empty detects npm, pnpm, or Yarn from the lockfile).
+        type: string
+        default: ''
+      setup:
+        description: Shell setup after installing dependencies in each test shard.
+        type: string
+        default: ''
+      shards:
+        description: Number of test shards (1-256), capped at the number of test files.
+        type: number
+        default: 4
+      group-by:
+        description: Group by auto, filesize, or runtime.
+        type: string
+        default: auto
+      pattern:
+        description: Glob selecting test files relative to the working directory (empty uses the framework's own listing).
+        type: string
+        default: ''
+      test-args:
+        description: JSON array of additional framework arguments used for listing and running tests.
+        type: string
+        default: '[]'
+      artifact-prefix:
+        description: Unique artifact name prefix when calling this workflow more than once.
+        type: string
+        default: testlanes
+      artifact-retention-days:
+        description: Retention for plans and shard results (0 uses repository default).
+        type: number
+        default: 30
+      timings-retention-days:
+        description: Retention for trusted timing history (0 uses repository default).
+        type: number
+        default: 90
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  shards:
+    name: Shard Tests
+    uses: ./.github/workflows/lanes.yml
+    with:
+      framework: node
+      runs-on: ${{ inputs.runs-on }}
+      timeout-minutes: ${{ inputs.timeout-minutes }}
+      max-parallel: ${{ inputs.max-parallel }}
+      fail-fast: ${{ inputs.fail-fast }}
+      node-version: ${{ inputs.node-version }}
+      working-directory: ${{ inputs.working-directory }}
+      install-command: ${{ inputs.install-command }}
+      setup: ${{ inputs.setup }}
+      shards: ${{ inputs.shards }}
+      group-by: ${{ inputs.group-by }}
+      pattern: ${{ inputs.pattern }}
+      test-args: ${{ inputs.test-args }}
+      artifact-prefix: ${{ inputs.artifact-prefix }}
+      artifact-retention-days: ${{ inputs.artifact-retention-days }}
+      timings-retention-days: ${{ inputs.timings-retention-days }}
