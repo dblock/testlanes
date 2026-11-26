@@ -14,6 +14,14 @@ export default [
     },
   },
   {
+    // Jest fixtures are CommonJS test files that use Jest's globals.
+    files: ["fixtures/jest/**/*.js"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: globals.jest,
+    },
+  },
+  {
     files: ["*.md"],
     plugins: { markdown },
     processor: "markdown/markdown",

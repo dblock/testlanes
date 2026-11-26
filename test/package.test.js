@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, before, test } from "node:test";
@@ -37,20 +37,54 @@ test("archive contains only the published files", () => {
     "package/DESIGN.md",
     "package/LICENSE",
     "package/README.md",
+    "package/bin/testlanes.js",
     "package/package.json",
+    "package/src/cli.js",
+    "package/src/collect.js",
+    "package/src/discover.js",
+    "package/src/frameworks.js",
+    "package/src/github.js",
     "package/src/index.js",
+    "package/src/partition.js",
+    "package/src/paths.js",
+    "package/src/plan.js",
+    "package/src/reporters/jest.js",
+    "package/src/reporters/record.js",
+    "package/src/reporters/vitest.js",
+    "package/src/run.js",
+    "package/src/timings.js",
+    "package/types/cli.d.ts",
+    "package/types/collect.d.ts",
+    "package/types/discover.d.ts",
+    "package/types/frameworks.d.ts",
+    "package/types/github.d.ts",
     "package/types/index.d.ts",
+    "package/types/partition.d.ts",
+    "package/types/paths.d.ts",
+    "package/types/plan.d.ts",
+    "package/types/reporters/jest.d.ts",
+    "package/types/reporters/record.d.ts",
+    "package/types/reporters/vitest.d.ts",
+    "package/types/run.d.ts",
+    "package/types/timings.d.ts",
   ]);
 });
 
-test("installed archive exposes the public entry point and types", async () => {
+test("installed archive exposes the CLI, entry points, and types", async () => {
   const consumer = join(workspace, "consumer");
-  run("mkdir", ["-p", consumer], root);
+  await mkdir(consumer);
   await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "consumer", private: true, type: "module" }));
   run(npm, ["install", "--no-audit", "--no-fund", archive], consumer);
-  const output = run(process.execPath, ["--input-type=module", "-e", "import { version } from 'testlanes'; console.log(version);"], consumer);
-  const manifest = JSON.parse(run(process.execPath, ["-p", "JSON.stringify(require('testlanes/package.json'))"], consumer));
-  assert.equal(output.trim(), manifest.version);
-  assert.equal(manifest.types, "./types/index.d.ts");
-  run(process.execPath, ["-e", "require('node:fs').accessSync(require.resolve('testlanes/package.json').replace('package.json', 'types/index.d.ts'))"], consumer);
+  const manifest = JSON.parse(await readFile(join(consumer, "node_modules", "testlanes", "package.json"), "utf8"));
+  assert.equal(run(npm, ["exec", "--no", "--", "testlanes", "--version"], consumer).trim(), manifest.version);
+  const script = [
+    "import { version } from 'testlanes';",
+    "import Vitest from 'testlanes/vitest';",
+    "import Jest from 'testlanes/jest';",
+    "console.log(JSON.stringify([version, typeof Vitest.prototype.onTestModuleEnd, typeof Jest.prototype.onTestResult]));",
+  ].join("\n");
+  assert.deepEqual(JSON.parse(run(process.execPath, ["--input-type=module", "-e", script], consumer)), [manifest.version, "function", "function"]);
+  for (const entry of [".", "./vitest", "./jest"]) {
+    await access(join(consumer, "node_modules", "testlanes", manifest.exports[entry].types));
+  }
 });

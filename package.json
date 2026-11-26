@@ -3,15 +3,27 @@
   "version": "0.1.0",
   "description": "Runtime-balanced Vitest and Jest shards for GitHub Actions, with timing history collected and reused automatically.",
   "type": "module",
+  "bin": {
+    "testlanes": "./bin/testlanes.js"
+  },
   "exports": {
     ".": {
       "types": "./types/index.d.ts",
       "default": "./src/index.js"
     },
+    "./vitest": {
+      "types": "./types/reporters/vitest.d.ts",
+      "default": "./src/reporters/vitest.js"
+    },
+    "./jest": {
+      "types": "./types/reporters/jest.d.ts",
+      "default": "./src/reporters/jest.js"
+    },
     "./package.json": "./package.json"
   },
   "types": "./types/index.d.ts",
   "files": [
+    "bin/",
     "src/",
     "types/",
     "README.md",
@@ -23,8 +35,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "test": "node --test",
-    "test:coverage": "c8 --reporter=text --reporter=lcov node --test",
+    "test": "node --test \"test/**/*.test.js\"",
+    "test:coverage": "c8 --reporter=text --reporter=lcov node --test \"test/**/*.test.js\"",
     "lint": "npm run lint:code && npm run lint:types && npm run lint:markdown",
     "lint:code": "eslint .",
     "lint:types": "tsc -p tsconfig.json --noEmit",
@@ -32,6 +44,21 @@
     "types": "node -e \"require('node:fs').rmSync('types',{recursive:true,force:true})\" && tsc -p tsconfig.json --declaration --emitDeclarationOnly --outDir types",
     "prepack": "npm run types",
     "package:check": "node --test test/package.test.js"
+  },
+  "dependencies": {
+    "tinyglobby": "^0.2.17"
+  },
+  "peerDependencies": {
+    "jest": ">=29.0.0 <31.0.0",
+    "vitest": ">=3.0.0 <6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    },
+    "jest": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@cspell/dict-en_us": "^4.4.43",
@@ -45,7 +72,9 @@
     "eslint-plugin-markdown-preferences-paragraph": "^0.2.0",
     "eslint-plugin-prose-spellcheck": "^0.1.2",
     "globals": "^17.14.0",
-    "typescript": "^7.0.2"
+    "jest": "^30.5.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.2"
   },
   "repository": {
     "type": "git",
