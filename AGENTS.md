@@ -17,17 +17,17 @@ Source lives in `src/` as ESM JavaScript with JSDoc types; `types/` is generated
 - Use public Vitest and Jest reporter and CLI APIs, not internal imports.
 - Pass Vitest files as absolute paths before any options, never after `--`, and verify that a shard measured exactly its assigned files.
 - Workflows run the caller's installed CLI with `npx --no-install`; keep third-party actions pinned by commit and pass inputs to scripts through environment variables, never by interpolating them into commands.
-- Keep `TESTLANES_VERSION` in `testlanes.yml` and `action.yml` equal to the package version. Keep one reusable workflow selected by its `framework` input rather than per-framework wrappers.
+- Keep `TESTLANES_VERSION` in `testlanes.yml` and `action.yml` equal to the package version, and the README install, workflow, and action pins on the latest released version; `npr.config.js` updates both during releases. Keep one reusable workflow selected by its `framework` input rather than per-framework wrappers.
 - Error and help messages are full sentences ending with periods.
 
 ## Setup and Validation
 
 Use Node.js `26.13.1` from `.nvmrc`. The package supports Node.js 22.12 or newer. Run `npm ci`, `npm test`, and `npm run lint` before every commit and push; `npm test` includes the packed-consumer suite, which `npm run package:check` runs alone. Inspect coverage with `npm run test:coverage` and aim close to 100% of runtime code with meaningful tests, preferring real Vitest, Jest, and node:test subprocesses against `fixtures/`. Check workflows with `actionlint`. Verify current stable releases when updating dependencies or GitHub Actions.
 
-Generate `assets/logo.svg` only with `npm run logo` from `scripts/logo.js`, keep it first in README at 160 pixels with descriptive alternative text, and keep it in the npm archive; see [Artwork](DESIGN.md#artwork). Keep Markdown paragraphs on one line, title-case Markdown headings and YAML display names, and add only reviewed words to `.spellcheck.txt`. Keep Test, Lint, and Package workflows separate, with explicit inline `matrix.entry` combinations and no `include` or `exclude`.
+Generate `assets/logo.svg` only with `npm run logo` from `scripts/logo.js`, keep it first in README at 160 pixels with descriptive alternative text, and keep it in the npm archive; see [Artwork](DESIGN.md#artwork). Keep Markdown paragraphs on one line, title-case Markdown headings and YAML display names, and add only reviewed words to `.spellcheck.txt`. Keep Test, Lint, and Package workflows separate, with explicit inline `matrix.entry` combinations and no `include` or `exclude`. Keep the packed-consumer test independent of `npm pack --json`, whose output differs between npm 11 and the release workflow's npm 12.
 
 ## Git and Pull Requests
 
 Work on `<username>/<topic>` branches in the main checkout, using sibling worktrees only for parallel work. Stack multiple changes as small PRs registered with `gh stack link`, keep one coherent commit per PR, update task-owned branches with `--force-with-lease`, merge with rebase merges only, and never force-push or directly push development changes to `master`. Add CHANGELOG entries with the actual PR number and author for features, improvements, and fixes. Include an AI co-author trailer in AI-assisted commits and disclose AI authorship in PR descriptions and comments. After a PR merges, fetch with pruning, verify the merge on GitHub, and remove only clean, task-owned branches and worktrees.
 
-Do not merge, publish, tag, create releases, configure credentials, or overwrite published versions without explicit authorization. See [Releasing](RELEASING.md).
+Do not merge, publish, tag, create releases, dispatch `release.yml`, configure credentials, or overwrite published versions without explicit authorization. The release workflow is the only exception to PR-based development: it pushes the release commit, tag, and next-development commit directly to `master`. See [Releasing](RELEASING.md).

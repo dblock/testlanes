@@ -8,7 +8,7 @@ Runtime-balanced Vitest, Jest, and node:test shards for GitHub Actions, with tim
 
 ## Installation
 
-testlanes has not been published yet. Once released, add it as a development dependency, pinning the same version as the workflow tag:
+Add testlanes as a development dependency, pinning the same version as the workflow tag:
 
 ```sh
 npm install --save-dev testlanes@0.1.0
