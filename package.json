@@ -79,6 +79,7 @@
     "eslint-plugin-prose-spellcheck": "^0.1.2",
     "globals": "^17.14.0",
     "jest": "^30.5.2",
+    "npm-package-release": "0.4.0",
     "typescript": "^7.0.2",
     "vitest": "^5.1.2"
   },

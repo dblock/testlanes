@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, before, test } from "node:test";
@@ -21,8 +21,14 @@ before(async () => {
   if (provided) {
     archive = resolve(provided);
   } else {
-    const [packed] = JSON.parse(run(npm, ["pack", "--json", "--pack-destination", workspace], root));
-    archive = join(workspace, packed.filename);
+    // Pack into an empty directory and take the only archive, rather than parsing `npm pack --json`,
+    // whose shape differs between npm 11 and npm 12 (the release workflow's npm).
+    const destination = join(workspace, "pack");
+    await mkdir(destination);
+    run(npm, ["pack", "--pack-destination", destination], root);
+    const archives = (await readdir(destination)).filter((name) => name.endsWith(".tgz"));
+    assert.equal(archives.length, 1, `npm pack must produce one archive, found: ${archives.join(", ")}`);
+    archive = join(destination, archives[0]);
   }
 });
 

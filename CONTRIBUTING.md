@@ -20,7 +20,7 @@ Run `npm test` and `npm run lint` before every push, including PR updates. Run f
 
 Keep Markdown paragraphs on one source line. Use title case for Markdown headings and for YAML workflow, job, and step display names, preserving proper names, acronyms, identifiers, and expressions; YAML display names are a convention without a dedicated checker.
 
-Test, Lint, and Package are separate GitHub Actions workflows with least-privilege permissions and npm caching. The Test matrix uses one `matrix.entry` array of explicit inline combinations, without `include` or `exclude`, and covers the supported Node.js floor and current releases; a coverage job reports to Coveralls. No Danger checks are configured.
+Test, Lint, and Package are separate GitHub Actions workflows with least-privilege permissions and npm caching. The Test matrix uses one `matrix.entry` array of explicit inline combinations, without `include` or `exclude`, and covers the supported Node.js floor and current releases; a coverage job reports to Coveralls. Package validates the packed consumer on Linux and macOS. The packed-consumer test lists the archive with `tar` instead of parsing `npm pack --json`, whose output differs between npm 11 and 12, so it also passes under the release workflow's npm. No Danger checks are configured.
 
 ## Tests
 
@@ -31,6 +31,7 @@ Tests live in `test/` and use `node --test`.
 - `test/collect.test.js` covers retries, duplicate and unassigned reports, and fingerprints.
 - `test/github.test.js` serves the GitHub REST API from a local HTTP server.
 - `test/reporters.test.js` and `test/workflows.test.js` cover the reporters, the workflow and action `TESTLANES_VERSION`, and the workflow's required and default inputs.
+- `test/release.test.js` runs the real release configuration with npm-package-release's simulated registry and GitHub Release host in a temporary repository, checking the published archive, the dated changelog, the next development version, and the version pins in both commits. It is skipped below Node.js 22.14, the release tool's minimum.
 - `test/package.test.js` packs the real archive with `npm pack`, checks its exact file list, installs it in a temporary consumer, and runs its CLI and entry points. Set `PACKAGE_ARCHIVE` to validate an existing archive instead; an empty value packs a fresh one.
 
 Vitest and Jest fixture specs use `.spec.js` names, and all fixtures live outside `test/`, so the repository's own `node --test "test/**/*.test.js"` does not run them. CI selects Vitest and Jest versions per Node.js version with `npm install --no-save`, covering Vitest 3, 4, and 5 and Jest 29 and 30. The Test Workflow Integration and Test Standalone Action workflows call the reusable workflow and standalone action from this repository against the fixtures on Linux and macOS; they install the repository with `npm ci --prefix ../..` because the fixtures depend on it through `file:../..`. Check workflows locally with [actionlint](https://github.com/rhysd/actionlint).
@@ -45,4 +46,4 @@ Work on a `<username>/<topic>` topic branch, such as `dblock/implementation`, in
 
 Update affected documentation. Add a CHANGELOG entry for features, improvements, and fixes, but not minor typos, as `- [#123](https://github.com/dblock/testlanes/pull/123): Description - [@username](https://github.com/username).`, above `- Your contribution here.` in the Next section, oldest first. Verify the PR number after opening and correct the entry if needed.
 
-Features increment the minor version in the same PR, resetting patch while in `0.x`; keep an unreleased version unchanged. Synchronize `package.json`, `package-lock.json`, and `TESTLANES_VERSION` in `.github/workflows/testlanes.yml` and `action.yml`; `test/workflows.test.js` checks them. Use closing issue references, include an AI co-author trailer in AI-assisted commits, and disclose AI authorship in AI-written PR descriptions and comments. See [Releasing](RELEASING.md).
+Features increment the minor version in the same PR, resetting patch while in `0.x`; keep an unreleased version unchanged. Synchronize `package.json`, `package-lock.json`, and `TESTLANES_VERSION` in `.github/workflows/testlanes.yml` and `action.yml`; `test/workflows.test.js` checks them. The README pins stay on the latest released version, and releases update all of them; see [Version Pins](RELEASING.md#version-pins). Use closing issue references, include an AI co-author trailer in AI-assisted commits, and disclose AI authorship in AI-written PR descriptions and comments. See [Releasing](RELEASING.md).
