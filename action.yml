@@ -41,7 +41,7 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         # Updated by each release so plans fail when the caller's package version differs.
-        TESTLANES_VERSION: 0.1.0
+        TESTLANES_VERSION: 0.1.1
         FRAMEWORK: ${{ inputs.framework }}
         PATTERN: ${{ inputs.pattern }}
         SHARDS: ${{ inputs.shards }}

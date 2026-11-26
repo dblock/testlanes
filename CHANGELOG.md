@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 (Next)
+
+- Your contribution here.
+
 ## 0.1.0 (2026/11/26)
 
 - [#2](https://github.com/dblock/testlanes/pull/2): Add Vitest and Jest timing reporters, the plan, run, collect, and history CLI, runtime-balanced partitioning, reusable `vitest.yml` and `jest.yml` workflows, and a standalone shard matrix action - [@dblock](https://github.com/dblock).

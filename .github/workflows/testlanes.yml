@@ -74,7 +74,7 @@ permissions:
 
 env:
   # Updated by each release so plans fail when the caller's package version differs.
-  TESTLANES_VERSION: 0.1.0
+  TESTLANES_VERSION: 0.1.1
 
 jobs:
   prepare:
