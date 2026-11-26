@@ -1,0 +1,34 @@
+name: Package
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Validate Package on ${{ matrix.entry.os }}
+    runs-on: ${{ matrix.entry.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        entry:
+          - { os: ubuntu-latest }
+          - { os: macos-latest }
+    steps:
+      - name: Check Out Source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set Up Node
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install Dependencies
+        run: npm ci
+      - name: Validate Packed Consumer
+        run: npm run package:check
