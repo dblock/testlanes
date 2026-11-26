@@ -8,9 +8,19 @@ import { root } from "./support.js";
 /** @param {string} path */
 const read = (path) => readFile(join(root, path), "utf8");
 
-test("workflow and action versions match the package version", async () => {
-  for (const path of [".github/workflows/testlanes.yml", "action.yml"]) {
-    assert.match(await read(path), new RegExp(`TESTLANES_VERSION: ${version.replaceAll(".", "\\.")}\\n`, "u"), path);
+test("the action version matches the package version", async () => {
+  assert.match(await read("action.yml"), new RegExp(`TESTLANES_VERSION: ${version.replaceAll(".", "\\.")}\\n`, "u"));
+});
+
+test("the reusable workflow pins no testlanes version", async () => {
+  const workflow = await read(".github/workflows/testlanes.yml");
+  assert.doesNotMatch(workflow, /TESTLANES_VERSION|--expect-version/u);
+});
+
+test("release references never edit workflow files", async () => {
+  const { releaseReferences, versionReferences } = await import("../npr.config.js");
+  for (const path of [...Object.keys(versionReferences), ...Object.keys(releaseReferences)]) {
+    assert.ok(!path.startsWith(".github/workflows/"), `${path} is a workflow file.`);
   }
 });
 

@@ -59,11 +59,13 @@ test("the release configuration publishes the validated archive and keeps pins o
   assert.match(await project.remoteFile("master", "CHANGELOG.md"),
     /^## 0\.1\.1 \(Next\)\n\n- Your contribution here\./mu);
 
-  // The workflow and action expect the installed CLI version, so they follow the package version.
-  for (const path of [".github/workflows/testlanes.yml", "action.yml"]) {
-    assert.match(await project.remoteFile(tag, path), /TESTLANES_VERSION: 0\.1\.0\n/u, path);
-    assert.match(await project.remoteFile("master", path), /TESTLANES_VERSION: 0\.1\.1\n/u, path);
-  }
+  // The action expects the installed CLI version, so it follows the package version.
+  assert.match(await project.remoteFile(tag, "action.yml"), /TESTLANES_VERSION: 0\.1\.0\n/u);
+  assert.match(await project.remoteFile("master", "action.yml"), /TESTLANES_VERSION: 0\.1\.1\n/u);
+  // GITHUB_TOKEN cannot push workflow files, so neither release commit may change one.
+  const changed = (await project.git("diff", "--name-only", result.initialCommit, "master")).trim().split(/\r?\n/u);
+  assert.ok(changed.length > 0);
+  assert.deepEqual(changed.filter((path) => path.startsWith(".github/workflows/")), []);
   // README pins that callers copy always name the published version.
   for (const ref of [tag, "master"]) {
     const readme = await project.remoteFile(ref, "README.md");

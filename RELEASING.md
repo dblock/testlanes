@@ -4,12 +4,13 @@ Releases run through the manually dispatched [`release.yml`](.github/workflows/r
 
 ## Version Pins
 
-Callers reference the reusable workflow and standalone action by release tag, and those install the CLI version named by `TESTLANES_VERSION`, which `testlanes plan` checks with `--expect-version`. [`npr.config.js`](npr.config.js) keeps these in step:
+Callers reference the reusable workflow and standalone action by release tag and run the `testlanes` version they installed as a development dependency. [`npr.config.js`](npr.config.js) keeps these in step:
 
-- `TESTLANES_VERSION` in `.github/workflows/testlanes.yml` and `action.yml` follows the package version: the release commit and tag name the released version, and the next-development commit names the next version, because this repository's integration workflows run them against its own package.
+- The reusable workflow `.github/workflows/testlanes.yml` carries no version and runs whatever `testlanes` the caller installed. Release references never name files under `.github/workflows/`, because the release workflow's `GITHUB_TOKEN` cannot push changes to workflow files; the 0.1.0 next-development push failed for that reason and was pushed manually from the run's `next.bundle`.
+- `TESTLANES_VERSION` in `action.yml` follows the package version and `testlanes plan` checks it with `--expect-version`: the release commit and tag name the released version, and the next-development commit names the next version, because this repository's integration workflows run the action against its own package.
 - The install command, workflow pin, and action pin in the README always name the latest released version, in both commits.
 
-`test/workflows.test.js` checks that `TESTLANES_VERSION` equals the package version and that the README pins agree and are not ahead of it, and `test/release.test.js` runs the real release configuration against simulated publication to check both commits.
+`test/workflows.test.js` checks that the action's `TESTLANES_VERSION` equals the package version, that the reusable workflow pins no version, that no release reference names a workflow file, and that the README pins agree and are not ahead of the package, and `test/release.test.js` runs the real release configuration against simulated publication to check both commits and that neither changes a workflow file.
 
 ## Setup Once
 
@@ -46,7 +47,7 @@ From this repository's checkout, with Node.js 26 and npm 12:
 
 ## Release
 
-1. Give the CHANGELOG `(Next)` section real notes, keep `package.json`, `package-lock.json`, and `TESTLANES_VERSION` at the unpublished version, merge, and confirm CI passes on `master`.
+1. Give the CHANGELOG `(Next)` section real notes, keep `package.json`, `package-lock.json`, and the action's `TESTLANES_VERSION` at the unpublished version, merge, and confirm CI passes on `master`.
 2. Dispatch the workflow:
 
    ```sh
@@ -60,10 +61,10 @@ From this repository's checkout, with Node.js 26 and npm 12:
    ```sh
    npm view testlanes@0.1.0 version dist.integrity dist.shasum --json --registry=https://registry.npmjs.org
    gh release view v0.1.0 --json tagName,assets
-   git fetch --tags origin && git show v0.1.0:.github/workflows/testlanes.yml | grep TESTLANES_VERSION
+   git fetch --tags origin && git show v0.1.0:action.yml | grep TESTLANES_VERSION
    ```
 
-   Compare the registry `dist.shasum` and `dist.integrity` with the GitHub Release asset and the archive retained in the run's artifacts; they must be identical. `master` should be at the next patch version with a new `(Next)` section, `TESTLANES_VERSION` at that version, and the README pins at the released version.
+   Compare the registry `dist.shasum` and `dist.integrity` with the GitHub Release asset and the archive retained in the run's artifacts; they must be identical. `master` should be at the next patch version with a new `(Next)` section, the action's `TESTLANES_VERSION` at that version, and the README pins at the released version.
 
 4. After the first release, deprecate the placeholder if `npr bootstrap` could not, which happens while npm is still processing the new package:
 

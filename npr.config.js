@@ -4,12 +4,13 @@ const version = String.raw`(?<version>\d+\.\d+\.\d+)`;
 const testlanesVersion = new RegExp(String.raw`TESTLANES_VERSION: ${version}\n`, "u");
 
 /**
- * The workflow and action pass `TESTLANES_VERSION` to `--expect-version`, and this repository's
- * integration workflows run them against its own package, so it follows the package version: the
+ * The standalone action passes `TESTLANES_VERSION` to `--expect-version`, and this repository's
+ * integration workflows run it against its own package, so it follows the package version: the
  * release tag names the released version and the next-development commit names the next one.
+ * References never name files under `.github/workflows/`: the release workflow's `GITHUB_TOKEN`
+ * cannot push changes to workflow files, so the reusable workflow carries no version.
  */
 export const versionReferences = Object.freeze({
-  ".github/workflows/testlanes.yml": [testlanesVersion],
   "action.yml": [testlanesVersion],
 });
 
