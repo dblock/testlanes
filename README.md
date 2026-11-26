@@ -1,3 +1,5 @@
+<img src="assets/logo.svg" alt="Four lanes of differently sized green test blocks that all end at the same edge" width="160">
+
 # testlanes
 
 [![Test](https://github.com/dblock/testlanes/actions/workflows/test.yml/badge.svg)](https://github.com/dblock/testlanes/actions/workflows/test.yml) [![Lint](https://github.com/dblock/testlanes/actions/workflows/lint.yml/badge.svg)](https://github.com/dblock/testlanes/actions/workflows/lint.yml) [![Package](https://github.com/dblock/testlanes/actions/workflows/package.yml/badge.svg)](https://github.com/dblock/testlanes/actions/workflows/package.yml) [![Coverage](https://coveralls.io/repos/github/dblock/testlanes/badge.svg?branch=master)](https://coveralls.io/github/dblock/testlanes?branch=master)
