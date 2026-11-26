@@ -7,7 +7,8 @@ import { describe, test } from "node:test";
 import { version } from "../src/index.js";
 import { cli, project } from "./support.js";
 
-for (const name of /** @type {const} */ (["vitest", "jest"])) {
+for (const name of /** @type {const} */ (["vitest", "jest", "node"])) {
+  const suffix = name === "node" ? "test.js" : "spec.js";
   describe(`${name} lifecycle`, () => {
     test("plans, runs every shard, collects, and replans by runtime", async () => {
       const cwd = await project(name);
@@ -33,8 +34,8 @@ for (const name of /** @type {const} */ (["vitest", "jest"])) {
       assert.equal(collected.code, 0, collected.stderr);
       assert.match(collected.stderr, /Collected timings for 5 files\./u);
       const baseline = JSON.parse(await readFile(join(work, "baseline", "timings.json"), "utf8"));
-      assert.deepEqual(Object.keys(baseline), ["specs/alpha.spec.js", "specs/bravo.spec.js", "specs/charlie.spec.js", "specs/delta.spec.js", "specs/nested/echo.spec.js"]);
-      assert.ok(baseline["specs/alpha.spec.js"] > baseline["specs/nested/echo.spec.js"]);
+      assert.deepEqual(Object.keys(baseline), ["alpha", "bravo", "charlie", "delta", "nested/echo"].map((spec) => `specs/${spec}.${suffix}`));
+      assert.ok(baseline[`specs/alpha.${suffix}`] > baseline[`specs/nested/echo.${suffix}`]);
 
       const replanned = cli(["plan", "--framework", name, "--shards", "2", "--timings", join(work, "baseline", "timings.json")], { cwd });
       assert.equal(replanned.code, 0, replanned.stderr);
@@ -45,8 +46,12 @@ for (const name of /** @type {const} */ (["vitest", "jest"])) {
     test("returns the runner exit code and writes no result when tests fail", async () => {
       const cwd = await project(name);
       const work = await mkdtemp(join(tmpdir(), "testlanes-work-"));
-      const failing = name === "vitest" ? 'import { test } from "vitest";\ntest("fails", () => { throw new Error("boom"); });\n' : 'test("fails", () => { throw new Error("boom"); });\n';
-      await writeFile(join(cwd, "specs", "alpha.spec.js"), failing);
+      const failing = {
+        vitest: 'import { test } from "vitest";\ntest("fails", () => { throw new Error("boom"); });\n',
+        jest: 'test("fails", () => { throw new Error("boom"); });\n',
+        node: 'import { test } from "node:test";\ntest("fails", () => { throw new Error("boom"); });\n',
+      }[name];
+      await writeFile(join(cwd, "specs", `alpha.${suffix}`), failing);
       assert.equal(cli(["plan", "--framework", name, "--shards", "1", "--out", join(work, "plan")], { cwd }).code, 0);
       const ran = cli(["run", "--plan", join(work, "plan"), "--shard", "1", "--out", join(work, "result")], { cwd });
       assert.equal(ran.code, 1);
@@ -58,7 +63,7 @@ for (const name of /** @type {const} */ (["vitest", "jest"])) {
       const cwd = await project(name);
       const work = await mkdtemp(join(tmpdir(), "testlanes-work-"));
       assert.equal(cli(["plan", "--framework", name, "--out", join(work, "plan")], { cwd }).code, 0);
-      await rm(join(cwd, "specs", "delta.spec.js"));
+      await rm(join(cwd, "specs", `delta.${suffix}`));
       const ran = cli(["run", "--plan", join(work, "plan"), "--shard", "1", "--out", join(work, "result")], { cwd });
       assert.equal(ran.code, 1);
       assert.match(ran.stderr, /testlanes: Selected test files or sizes changed after preparation\./u);
@@ -66,7 +71,7 @@ for (const name of /** @type {const} */ (["vitest", "jest"])) {
 
     test("selects files with a glob pattern", async () => {
       const cwd = await project(name);
-      const planned = cli(["plan", "--framework", name, "--pattern", "specs/*.spec.js", "--shards", "8"], { cwd });
+      const planned = cli(["plan", "--framework", name, "--pattern", `specs/*.${suffix}`, "--shards", "8"], { cwd });
       assert.equal(planned.code, 0, planned.stderr);
       assert.equal(JSON.parse(planned.stdout).length, 4);
     });

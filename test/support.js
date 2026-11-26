@@ -10,7 +10,7 @@ export const bin = join(root, "bin", "testlanes.js");
  * Copies a fixture project into a temporary directory that resolves the
  * repository's installed Vitest and Jest through a node_modules symlink.
  *
- * @param {"vitest" | "jest"} name
+ * @param {"vitest" | "jest" | "node"} name
  * @returns {Promise<string>}
  */
 export async function project(name) {

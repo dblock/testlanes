@@ -1,7 +1,7 @@
 {
   "name": "testlanes",
   "version": "0.1.0",
-  "description": "Runtime-balanced Vitest and Jest shards for GitHub Actions, with timing history collected and reused automatically.",
+  "description": "Runtime-balanced Vitest, Jest, and node:test shards for GitHub Actions, with timing history collected and reused automatically.",
   "type": "module",
   "bin": {
     "testlanes": "./bin/testlanes.js"
@@ -18,6 +18,10 @@
     "./jest": {
       "types": "./types/reporters/jest.d.ts",
       "default": "./src/reporters/jest.js"
+    },
+    "./node": {
+      "types": "./types/reporters/node.d.ts",
+      "default": "./src/reporters/node.js"
     },
     "./package.json": "./package.json"
   },
@@ -91,6 +95,7 @@
   "keywords": [
     "vitest",
     "jest",
+    "node-test",
     "github-actions",
     "sharding",
     "parallel",

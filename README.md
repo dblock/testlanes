@@ -4,7 +4,7 @@
 
 [![Test](https://github.com/dblock/testlanes/actions/workflows/test.yml/badge.svg)](https://github.com/dblock/testlanes/actions/workflows/test.yml) [![Lint](https://github.com/dblock/testlanes/actions/workflows/lint.yml/badge.svg)](https://github.com/dblock/testlanes/actions/workflows/lint.yml) [![Package](https://github.com/dblock/testlanes/actions/workflows/package.yml/badge.svg)](https://github.com/dblock/testlanes/actions/workflows/package.yml) [![Coverage](https://coveralls.io/repos/github/dblock/testlanes/badge.svg?branch=master)](https://coveralls.io/github/dblock/testlanes?branch=master)
 
-Runtime-balanced Vitest and Jest shards for GitHub Actions, with timing history collected and reused automatically. A JavaScript port of [parallel_tests-ci](https://github.com/dblock/parallel_tests-ci).
+Runtime-balanced Vitest, Jest, and node:test shards for GitHub Actions, with timing history collected and reused automatically. A JavaScript port of [parallel_tests-ci](https://github.com/dblock/parallel_tests-ci).
 
 ## Installation
 
@@ -14,7 +14,7 @@ testlanes has not been published yet. Once released, add it as a development dep
 npm install --save-dev testlanes@0.1.0
 ```
 
-Requires Node.js 22.12 or newer and Vitest 3 to 5 or Jest 29 or 30, installed with npm, pnpm, or Yarn using a `node_modules` linker.
+Requires Node.js 22.12 or newer and Vitest 3 to 5, Jest 29 or 30, or the built-in node:test runner, installed with npm, pnpm, or Yarn using a `node_modules` linker.
 
 ## Usage
 
@@ -51,7 +51,20 @@ jobs:
       shards: 8
 ```
 
-Test files come from the runner's own listing (`vitest list` or `jest --listTests`), so your configuration's include and exclude settings apply. The first run groups files by size. Each successful push to the default branch records per-file timings, and later runs, including PRs, balance shards by those timings without updating them.
+### node:test
+
+Use the node:test workflow for suites run with `node --test`:
+
+```yaml
+jobs:
+  test:
+    name: Test
+    uses: dblock/testlanes/.github/workflows/node.yml@v0.1.0
+    with:
+      shards: 8
+```
+
+Vitest and Jest test files come from the runner's own listing (`vitest list` or `jest --listTests`), so your configuration's include and exclude settings apply. node:test cannot list files, so testlanes matches the default `node --test` patterns, such as `**/*.test.js` and `**/test/**/*.js`, outside `node_modules`; set `pattern` to select others, for example `test/**/*.test.js`. The first run groups files by size. Each successful push to the default branch records per-file timings, and later runs, including PRs, balance shards by those timings without updating them.
 
 ### Standalone Shard Matrix Action
 
@@ -90,14 +103,14 @@ jobs:
 
 ## Configuration
 
-The `vitest.yml` and `jest.yml` workflows accept these inputs.
+The `vitest.yml`, `jest.yml`, and `node.yml` workflows accept these inputs.
 
 | Input | Default | Description |
 | --- | --- | --- |
 | `shards` | `4` | Number of shards, from 1 to 256, capped at the number of test files. |
 | `group-by` | `auto` | `auto` uses timings when at least half the files have them, otherwise file sizes; `filesize` or `runtime` force one mode. |
-| `pattern` | | Glob selecting test files relative to the working directory, instead of the runner's listing. |
-| `test-args` | `[]` | JSON array of extra runner arguments, used when listing and running tests, such as `'["--project","unit"]'`. |
+| `pattern` | | Glob selecting test files relative to the working directory, instead of the runner's listing or the default node:test patterns. |
+| `test-args` | `[]` | JSON array of extra runner arguments, used when listing and running tests, such as `'["--project","unit"]'` for Vitest or `'["--test-concurrency=2"]'` for node:test. |
 | `working-directory` | `.` | Directory containing the project's `package.json`. |
 | `node-version` | | Node.js version; empty reads `.nvmrc`, `.node-version`, or `package.json` in the working directory. |
 | `install-command` | | Dependency installation command; empty runs `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install` with a frozen lockfile, detected from the lockfile and `packageManager`. |
@@ -110,7 +123,7 @@ The `vitest.yml` and `jest.yml` workflows accept these inputs.
 | `artifact-retention-days` | `30` | Retention for plans and shard results; `0` uses the repository default. |
 | `timings-retention-days` | `90` | Retention for trusted timing history; `0` uses the repository default. |
 
-The standalone action accepts `framework` (`vitest` or `jest`), `working-directory`, `pattern`, `shards`, `group-by`, `test-args`, and `timings`, an optional testlanes timing file. It outputs `matrix`, an array of `shard` numbers and `files`, and the chosen `group-by`.
+The standalone action accepts `framework` (`vitest`, `jest`, or `node`), `working-directory`, `pattern`, `shards`, `group-by`, `test-args`, and `timings`, an optional testlanes timing file. It outputs `matrix`, an array of `shard` numbers and `files`, and the chosen `group-by`.
 
 Shards run with the runner's default reporter plus the testlanes timing reporter, replacing reporters set in your configuration. Keep the `testlanes` package and workflow or action tag versions matched; planning fails when they differ.
 

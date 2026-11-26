@@ -1,13 +1,13 @@
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { glob } from "tinyglobby";
-import { execute, framework } from "./frameworks.js";
+import { execute, framework, nodeTestPatterns } from "./frameworks.js";
 import { relativePath, validatePath } from "./paths.js";
 
 /**
- * Selects test files and records their sizes. The framework's own listing is
- * used unless a glob pattern is given, so include and exclude configuration is
- * respected.
+ * Selects test files and records their sizes. Vitest and Jest list their own
+ * files, so include and exclude configuration is respected; node:test files
+ * match the default `node --test` patterns. A glob pattern overrides both.
  *
  * @param {{ framework: string, cwd: string, pattern?: string | null, testArgs?: string[] }} options
  * @returns {Promise<Record<string, number>>}
@@ -15,8 +15,8 @@ import { relativePath, validatePath } from "./paths.js";
 export async function discover({ framework: name, cwd, pattern = null, testArgs = [] }) {
   const selected = framework(name);
   let files;
-  if (pattern) {
-    files = (await glob(pattern, { cwd, onlyFiles: true, expandDirectories: false })).map(validatePath);
+  if (pattern || !selected.listArgs) {
+    files = (await glob(pattern || nodeTestPatterns(), { cwd, onlyFiles: true, expandDirectories: false, ignore: pattern ? [] : ["**/node_modules/**"] })).map(validatePath);
   } else {
     const { code, stdout } = await execute(selected, selected.listArgs(testArgs), { cwd, capture: true });
     if (code !== 0) throw new Error(`Listing ${name} test files failed with exit code ${code}.`);

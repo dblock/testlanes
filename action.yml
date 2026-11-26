@@ -1,11 +1,11 @@
 name: testlanes Shard Matrix
-description: Assign Vitest or Jest files to GitHub Actions matrix jobs using file sizes or past runtimes.
+description: Assign Vitest, Jest, or node:test files to GitHub Actions matrix jobs using file sizes or past runtimes.
 branding:
   icon: grid
   color: green
 inputs:
   framework:
-    description: Test framework, either vitest or jest.
+    description: Test framework, either vitest, jest, or node.
     default: vitest
   working-directory:
     description: Directory containing the project's package.json.

@@ -17,7 +17,7 @@ test("workflow and action versions match the package version", async () => {
 test("framework workflows forward every shared input", async () => {
   const lanes = await read(".github/workflows/lanes.yml");
   const inputs = [...lanes.split("\njobs:")[0].matchAll(/^ {6}([a-z-]+):\n {8}description:/gmu)].map((match) => match[1]).filter((name) => name !== "framework");
-  for (const [path, name] of [[".github/workflows/vitest.yml", "vitest"], [".github/workflows/jest.yml", "jest"]]) {
+  for (const [path, name] of [[".github/workflows/vitest.yml", "vitest"], [".github/workflows/jest.yml", "jest"], [".github/workflows/node.yml", "node"]]) {
     const text = await read(path);
     assert.match(text, new RegExp(`framework: ${name}\\n`, "u"));
     for (const input of inputs) {

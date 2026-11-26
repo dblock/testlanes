@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { frameworks, framework, packageBin } from "../src/frameworks.js";
+import { frameworks, framework, nodeTestPatterns, packageBin } from "../src/frameworks.js";
 import { partition } from "../src/partition.js";
 import { relativePath, validatePath } from "../src/paths.js";
 import { createPlan, fileMatrix, fingerprint, formatPlan, grouping, parsePlan, positiveInteger, testArguments, workerMatrix } from "../src/plan.js";
@@ -111,7 +111,7 @@ describe("plan", () => {
 
   test("rejects invalid settings and empty selections", () => {
     assert.throws(() => createPlan({ version: "1", framework: "vitest", files, shards: 257 }), /at most 256 shards/u);
-    assert.throws(() => createPlan({ version: "1", framework: "mocha", files }), /Unsupported test framework "mocha"; expected vitest or jest\./u);
+    assert.throws(() => createPlan({ version: "1", framework: "mocha", files }), /Unsupported test framework "mocha"; expected vitest, jest, or node\./u);
     assert.throws(() => createPlan({ version: "1", framework: "vitest", files: {} }), /No vitest test files were found\./u);
     assert.throws(() => createPlan({ version: "1", framework: "jest", files: {}, pattern: "x/*.js" }), /No test files match "x\/\*\.js"\./u);
   });
@@ -136,6 +136,20 @@ describe("frameworks", () => {
     assert.deepEqual(frameworks.vitest.runArgs(["/r/a.js"], ["--bail=1"]).slice(0, 2), ["run", "/r/a.js"]);
     assert.deepEqual(frameworks.jest.runArgs(["/r/a.js"], ["--ci"]).slice(-4), ["--ci", "--runTestsByPath", "--", "/r/a.js"]);
     assert.equal(framework("jest"), frameworks.jest);
+    const node = frameworks.node.runArgs(["/r/a.test.js"], ["--test-concurrency=2"]);
+    assert.deepEqual(node.slice(0, 3), ["--test", "--test-reporter=spec", "--test-reporter-destination=stdout"]);
+    assert.match(node[3], /^--test-reporter=.+node\.js$/u);
+    assert.deepEqual(node.slice(4), ["--test-reporter-destination=stderr", "--test-concurrency=2", "/r/a.test.js"]);
+    assert.equal(frameworks.node.listArgs, null);
+    assert.deepEqual(frameworks.node.parseList("ignored"), []);
+    assert.deepEqual(frameworks.node.command("/r"), [process.execPath]);
+    assert.deepEqual(frameworks.node.environment?.({ NODE_TEST_CONTEXT: "child-v8", PATH: "/bin" }), { PATH: "/bin" });
+  });
+
+  test("matches the default node --test patterns", () => {
+    const patterns = nodeTestPatterns();
+    assert.equal(patterns.length, 6);
+    assert.ok(patterns.includes("**/test/**/*." + (process.features.typescript ? "{cjs,mjs,js,cts,mts,ts}" : "{cjs,mjs,js}")));
   });
 
   test("parses runner listings and rejects unexpected output", () => {

@@ -50,6 +50,7 @@ test("archive contains only the published files", () => {
     "package/src/paths.js",
     "package/src/plan.js",
     "package/src/reporters/jest.js",
+    "package/src/reporters/node.js",
     "package/src/reporters/record.js",
     "package/src/reporters/vitest.js",
     "package/src/run.js",
@@ -64,6 +65,7 @@ test("archive contains only the published files", () => {
     "package/types/paths.d.ts",
     "package/types/plan.d.ts",
     "package/types/reporters/jest.d.ts",
+    "package/types/reporters/node.d.ts",
     "package/types/reporters/record.d.ts",
     "package/types/reporters/vitest.d.ts",
     "package/types/run.d.ts",
@@ -82,10 +84,11 @@ test("installed archive exposes the CLI, entry points, and types", async () => {
     "import { version } from 'testlanes';",
     "import Vitest from 'testlanes/vitest';",
     "import Jest from 'testlanes/jest';",
-    "console.log(JSON.stringify([version, typeof Vitest.prototype.onTestModuleEnd, typeof Jest.prototype.onTestResult]));",
+    "import node from 'testlanes/node';",
+    "console.log(JSON.stringify([version, typeof Vitest.prototype.onTestModuleEnd, typeof Jest.prototype.onTestResult, typeof node]));",
   ].join("\n");
-  assert.deepEqual(JSON.parse(run(process.execPath, ["--input-type=module", "-e", script], consumer)), [manifest.version, "function", "function"]);
-  for (const entry of [".", "./vitest", "./jest"]) {
+  assert.deepEqual(JSON.parse(run(process.execPath, ["--input-type=module", "-e", script], consumer)), [manifest.version, "function", "function", "function"]);
+  for (const entry of [".", "./vitest", "./jest", "./node"]) {
     await access(join(consumer, "node_modules", "testlanes", manifest.exports[entry].types));
   }
 });

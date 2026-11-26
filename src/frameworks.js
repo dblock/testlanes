@@ -7,10 +7,23 @@ import { fileURLToPath } from "node:url";
  * @typedef {object} Framework
  * @property {string} name
  * @property {string} reporter Absolute path of the testlanes timing reporter.
- * @property {(testArgs: string[]) => string[]} listArgs
+ * @property {((testArgs: string[]) => string[]) | null} listArgs Listing arguments, or null when files come from default patterns.
  * @property {(stdout: string) => string[]} parseList
  * @property {(files: string[], testArgs: string[]) => string[]} runArgs
+ * @property {(cwd: string) => string[]} command Executable and leading arguments.
+ * @property {(env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv} [environment] Adjusts the runner's environment.
  */
+
+/**
+ * Glob patterns matching the files `node --test` runs by default, including
+ * TypeScript when the running Node.js can strip types.
+ *
+ * @returns {string[]}
+ */
+export function nodeTestPatterns() {
+  const extensions = process.features.typescript ? "{cjs,mjs,js,cts,mts,ts}" : "{cjs,mjs,js}";
+  return ["**/*.test", "**/*-test", "**/*_test", "**/test-*", "**/test", "**/test/**/*"].map((pattern) => `${pattern}.${extensions}`);
+}
 
 const reporters = fileURLToPath(new URL("./reporters/", import.meta.url));
 
@@ -27,6 +40,7 @@ export const frameworks = {
     }),
     // Vitest ignores file filters after `--`, so files come first, before any options.
     runArgs: (files, testArgs) => ["run", ...files, "--reporter=default", `--reporter=${join(reporters, "vitest.js")}`, ...testArgs],
+    command: (cwd) => [process.execPath, packageBin("vitest", cwd)],
   },
   jest: {
     name: "jest",
@@ -38,6 +52,31 @@ export const frameworks = {
     }),
     // `--reporters` accepts several values, so files follow `--` to keep them positional.
     runArgs: (files, testArgs) => ["--reporters=default", `--reporters=${join(reporters, "jest.js")}`, ...testArgs, "--runTestsByPath", "--", ...files],
+    command: (cwd) => [process.execPath, packageBin("jest", cwd)],
+  },
+  node: {
+    name: "node",
+    reporter: join(reporters, "node.js"),
+    // node --test cannot list files, so discovery globs its default patterns.
+    listArgs: null,
+    parseList: () => [],
+    // The testlanes reporter writes its own file, so its destination stream stays empty.
+    runArgs: (files, testArgs) => [
+      "--test",
+      "--test-reporter=spec",
+      "--test-reporter-destination=stdout",
+      `--test-reporter=${join(reporters, "node.js")}`,
+      "--test-reporter-destination=stderr",
+      ...testArgs,
+      ...files,
+    ],
+    command: () => [process.execPath],
+    // A nested node --test skips its files when it inherits the parent's test context.
+    environment: (env) => {
+      const copy = { ...env };
+      delete copy.NODE_TEST_CONTEXT;
+      return copy;
+    },
   },
 };
 
@@ -48,8 +87,8 @@ export const frameworks = {
  * @returns {Framework}
  */
 export function framework(name) {
-  if (name !== "vitest" && name !== "jest") {
-    throw new Error(`Unsupported test framework ${JSON.stringify(name)}; expected vitest or jest.`);
+  if (name !== "vitest" && name !== "jest" && name !== "node") {
+    throw new Error(`Unsupported test framework ${JSON.stringify(name)}; expected vitest, jest, or node.`);
   }
   return frameworks[name];
 }
@@ -102,11 +141,11 @@ export function packageBin(name, cwd) {
  * @returns {Promise<{ code: number, stdout: string }>}
  */
 export function execute(selected, args, { cwd, env = process.env, capture = false }) {
-  const bin = packageBin(selected.name, cwd);
+  const [executable, ...leading] = selected.command(cwd);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, [bin, ...args], {
+    const child = spawn(executable, [...leading, ...args], {
       cwd,
-      env,
+      env: selected.environment ? selected.environment(env) : env,
       stdio: ["ignore", capture ? "pipe" : "inherit", "inherit"],
     });
     let stdout = "";

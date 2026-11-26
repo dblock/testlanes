@@ -27,13 +27,13 @@ Test, Lint, and Package are separate GitHub Actions workflows with least-privile
 Tests live in `test/` and use `node --test`.
 
 - `test/core.test.js` covers paths, timings, partitioning, plans, and runner adapters.
-- `test/cli.test.js` runs the real CLI as a subprocess against temporary copies of `fixtures/vitest` and `fixtures/jest`, which resolve the repository's installed Vitest and Jest, covering the full plan, run, and collect lifecycle, failing tests, changed files, Vitest's substring file filters, and error messages.
+- `test/cli.test.js` runs the real CLI as a subprocess against temporary copies of `fixtures/vitest`, `fixtures/jest`, and `fixtures/node`, which resolve the repository's installed Vitest and Jest, covering the full plan, run, and collect lifecycle, failing tests, changed files, Vitest's substring file filters, and error messages.
 - `test/collect.test.js` covers retries, duplicate and unassigned reports, and fingerprints.
 - `test/github.test.js` serves the GitHub REST API from a local HTTP server.
 - `test/reporters.test.js` and `test/workflows.test.js` cover the reporters, the workflow and action `TESTLANES_VERSION`, and input forwarding.
 - `test/package.test.js` packs the real archive with `npm pack`, checks its exact file list, installs it in a temporary consumer, and runs its CLI and entry points. Set `PACKAGE_ARCHIVE` to validate an existing archive instead; an empty value packs a fresh one.
 
-Fixture specs use `.spec.js` names outside `test/` so `node --test` does not run them. CI selects Vitest and Jest versions per Node.js version with `npm install --no-save`, covering Vitest 3, 4, and 5 and Jest 29 and 30. The Test Workflow Integration and Test Standalone Action workflows call the reusable workflows and standalone action from this repository against the fixtures on Linux and macOS; they install the repository with `npm ci --prefix ../..` because the fixtures depend on it through `file:../..`. Check workflows locally with [actionlint](https://github.com/rhysd/actionlint).
+Vitest and Jest fixture specs use `.spec.js` names, and all fixtures live outside `test/`, so the repository's own `node --test "test/**/*.test.js"` does not run them. CI selects Vitest and Jest versions per Node.js version with `npm install --no-save`, covering Vitest 3, 4, and 5 and Jest 29 and 30. The Test Workflow Integration and Test Standalone Action workflows call the reusable workflows and standalone action from this repository against the fixtures on Linux and macOS; they install the repository with `npm ci --prefix ../..` because the fixtures depend on it through `file:../..`. Check workflows locally with [actionlint](https://github.com/rhysd/actionlint).
 
 Add focused behavioral tests for new or fixed behavior, including errors and edge cases, and prefer real Vitest and Jest subprocesses and installed-consumer fixtures over mocks. Aim for coverage close to 100% of runtime code, inspect line and branch coverage with `npm run test:coverage`, and report gaps rather than adding trivial assertions or excluding real code.
 
