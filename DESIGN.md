@@ -19,11 +19,10 @@ The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types duri
 | `testlanes run` | Verifies the plan and runs one shard, writing `timings.json` and a `result.json` marker only on success. |
 | `testlanes collect` | Validates every shard's newest report and merges their timings into a baseline. |
 | `testlanes history` | Finds the newest trusted baseline artifact through the GitHub REST API. |
-| `lanes.yml` | Shared reusable workflow running Prepare, Test, and Collect jobs. |
-| `vitest.yml`, `jest.yml`, `node.yml` | Reusable workflows that select their framework and forward every other input to `lanes.yml`. |
+| `testlanes.yml` | Reusable workflow running Prepare, Test, and Collect jobs for the framework selected by its required `framework` input. |
 | `action.yml` | Standalone composite action that runs `testlanes plan` and outputs a file matrix. |
 
-Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. `lanes.yml` and `action.yml` declare `TESTLANES_VERSION`, and planning fails when it differs from the installed package version.
+Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. `testlanes.yml` and `action.yml` declare `TESTLANES_VERSION`, and planning fails when it differs from the installed package version.
 
 ## File Selection
 

@@ -18,9 +18,7 @@ Requires Node.js 22.12 or newer and Vitest 3 to 5, Jest 29 or 30, or the built-i
 
 ## Usage
 
-### Vitest
-
-Add `.github/workflows/test.yml`:
+Add `.github/workflows/test.yml`, setting `framework` to `vitest`, `jest`, or `node` for node:test:
 
 ```yaml
 name: Test
@@ -33,34 +31,9 @@ permissions:
 jobs:
   test:
     name: Test
-    uses: dblock/testlanes/.github/workflows/vitest.yml@v0.1.0
+    uses: dblock/testlanes/.github/workflows/testlanes.yml@v0.1.0
     with:
-      shards: 8
-```
-
-### Jest
-
-Use the Jest workflow instead:
-
-```yaml
-jobs:
-  test:
-    name: Test
-    uses: dblock/testlanes/.github/workflows/jest.yml@v0.1.0
-    with:
-      shards: 8
-```
-
-### node:test
-
-Use the node:test workflow for suites run with `node --test`:
-
-```yaml
-jobs:
-  test:
-    name: Test
-    uses: dblock/testlanes/.github/workflows/node.yml@v0.1.0
-    with:
+      framework: vitest
       shards: 8
 ```
 
@@ -103,10 +76,11 @@ jobs:
 
 ## Configuration
 
-The `vitest.yml`, `jest.yml`, and `node.yml` workflows accept these inputs.
+The `testlanes.yml` workflow accepts these inputs.
 
 | Input | Default | Description |
 | --- | --- | --- |
+| `framework` | | Required: `vitest`, `jest`, or `node`. |
 | `shards` | `4` | Number of shards, from 1 to 256, capped at the number of test files. |
 | `group-by` | `auto` | `auto` uses timings when at least half the files have them, otherwise file sizes; `filesize` or `runtime` force one mode. |
 | `pattern` | | Glob selecting test files relative to the working directory, instead of the runner's listing or the default node:test patterns. |
