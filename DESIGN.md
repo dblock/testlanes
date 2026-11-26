@@ -14,7 +14,7 @@ The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types duri
 | --- | --- |
 | `testlanes/vitest` reporter | Records each module's environment, preparation, collection, setup, and test time from `onTestModuleEnd` and writes it on `onTestRunEnd`. |
 | `testlanes/jest` reporter | Records each file's `perfStats.runtime` from `onTestResult` and writes it on `onRunComplete`. |
-| `testlanes/node` reporter | Records each file's duration from the top-level `test:complete` event that `node --test` emits per file, falling back to the sum of the file's top-level tests. |
+| `testlanes/node` reporter | Records each file's duration from the top-level `test:complete` event that `node --test` emits per file, ignoring tests defined in imported modules, which report the imported module's path; without per-file events, it sums each file's top-level tests. |
 | `testlanes plan` | Selects files, chooses a grouping, partitions them, writes `plan.json`, and outputs a matrix. |
 | `testlanes run` | Verifies the plan and runs one shard, writing `timings.json` and a `result.json` marker only on success. |
 | `testlanes collect` | Validates every shard's newest report and merges their timings into a baseline. |
