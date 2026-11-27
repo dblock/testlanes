@@ -11,7 +11,7 @@ Runtime-balanced Vitest, Jest, and node:test shards for GitHub Actions, with tim
 Add testlanes as a development dependency, pinning the same version as the workflow tag:
 
 ```sh
-npm install --save-dev testlanes@0.2.0
+npm install --save-dev testlanes@0.3.0
 ```
 
 Requires Node.js 22.12 or newer and Vitest 3 to 5, Jest 29 or 30, or the built-in node:test runner, installed with npm, pnpm, or Yarn using a `node_modules` linker.
@@ -31,7 +31,7 @@ permissions:
 jobs:
   test:
     name: Test
-    uses: dblock/testlanes/.github/workflows/testlanes.yml@v0.2.0
+    uses: dblock/testlanes/.github/workflows/testlanes.yml@v0.3.0
     with:
       framework: vitest
       shards: 8
@@ -55,7 +55,7 @@ Wrap each shard's tests with a coverage tool and upload its report, then send ev
 jobs:
   test:
     name: Test
-    uses: dblock/testlanes/.github/workflows/testlanes.yml@v0.2.0
+    uses: dblock/testlanes/.github/workflows/testlanes.yml@v0.3.0
     with:
       framework: node
       test-wrapper: '["c8","--reporter=lcov"]'
@@ -93,7 +93,7 @@ jobs:
       - uses: actions/setup-node@v7.1.0
       - run: npm ci
       - id: plan
-        uses: dblock/testlanes@v0.2.0
+        uses: dblock/testlanes@v0.3.0
         with:
           framework: vitest
           shards: '4'
