@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,8 +12,8 @@ const read = (path) => readFile(join(root, path), "utf8");
 
 test("the action runs testlanes github matrix and pins no version", async () => {
   const action = await read("action.yml");
-  assert.doesNotMatch(action, /TESTLANES_VERSION|--expect-version/u);
-  assert.match(action, /run: npx --no-install testlanes github matrix\n/u);
+  assert.doesNotMatch(action, /TESTLANES_VERSION|--expect-version|^ +shell:/mu);
+  assert.match(action, /await exec\.exec\("npx", \["--no-install", "testlanes", "github", "matrix"\]/u);
 });
 
 test("the reusable workflow pins no testlanes version", async () => {
@@ -53,53 +53,60 @@ test("the reusable workflow requires a framework and defaults the artifact prefi
 
 test("the reusable workflow's steps are the same on every OS", async () => {
   const workflow = await read(".github/workflows/testlanes.yml");
-  assert.doesNotMatch(workflow, /runner\.os|pwsh|bash -/u);
+  assert.doesNotMatch(workflow, /runner\.os|pwsh|bash -|^ +shell:/mu);
   for (const step of ["history", "prepare", "run", "collect"]) {
-    assert.match(workflow, new RegExp(`run: npx --no-install testlanes github ${step}\n`, "u"));
+    assert.match(workflow, new RegExp(`await exec\\.exec\\("npx", \\["--no-install", "testlanes", "github", "${step}"\\]`, "u"));
   }
+  // Only the caller's own scripts run in a shell.
+  assert.deepEqual([...workflow.matchAll(/^ +run: (.+)$/gmu)].map((match) => match[1]), ["${{ inputs.install-command }}", "${{ inputs.setup }}"]);
 });
 
 test("the package manager detection step reads lockfiles, packageManager, and version files", async () => {
   const workflow = await read(".github/workflows/testlanes.yml");
-  assert.equal(workflow.match(/shell: node \{0\}/gu)?.length, 1);
-  const block = /shell: node \{0\}\n(?: {8}.+\n)*? {8}run: \|\n((?: {10}.*\n)+)/u.exec(workflow);
+  const block = /- name: Detect Package Manager\n(?: {8}.+\n)*? {10}script: \|\n((?: {12}.*\n)+)/u.exec(workflow);
   assert.ok(block, "detection step not found");
-  const script = block[1].replaceAll(/^ {10}/gmu, "");
+  const script = block[1].replaceAll(/^ {12}/gmu, "");
   const scratch = await mkdtemp(join(tmpdir(), "testlanes-detect-"));
-  await writeFile(join(scratch, "detect.cjs"), script);
-  /** @param {string} text */
-  const parse = (text) => Object.fromEntries(text.trim().split("\n").map((line) => line.split(/=(.*)/su).slice(0, 2)));
+  // github-script runs the script as an async function body with require and core.
+  const run = new Function("require", "core", "process", script);
   /** @param {Record<string, string>} files */
   const detect = async (files) => {
     const project = await mkdtemp(join(scratch, "project-"));
     for (const [name, content] of Object.entries(files)) await writeFile(join(project, name), content);
-    const output = join(project, "output");
-    const environment = join(project, "environment");
-    await writeFile(output, "");
-    await writeFile(environment, "");
-    execFileSync(process.execPath, [join(scratch, "detect.cjs")], { cwd: project, env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_ENV: environment } });
-    const outputs = parse(await readFile(output, "utf8"));
-    const variables = parse(await readFile(environment, "utf8"));
+    /** @type {Record<string, string>} */
+    const outputs = {};
+    /** @type {Record<string, string>} */
+    const variables = {};
+    const core = {
+      /** @param {string} key @param {string} value */
+      setOutput: (key, value) => { outputs[key] = value; },
+      /** @param {string} key @param {string} value */
+      exportVariable: (key, value) => { variables[key] = value; },
+    };
+    run(createRequire(import.meta.url), core, { env: { WORKING_DIRECTORY: project } });
     assert.deepEqual(variables, {
       TESTLANES_PACKAGE_MANAGER: outputs["package-manager"],
+      TESTLANES_LOCKFILE: outputs.lockfile,
       TESTLANES_INSTALL: outputs.install,
+      TESTLANES_NODE_VERSION_FILE: outputs["node-version-file"],
     });
-    return outputs;
+    return { ...outputs, "node-version-file": outputs["node-version-file"].replace(project, "app") };
   };
-  assert.deepEqual(await detect({}), { "package-manager": "npm", install: "npm ci" });
-  assert.deepEqual(await detect({ "pnpm-lock.yaml": "", ".nvmrc": "26" }), { "package-manager": "pnpm", install: "pnpm install --frozen-lockfile" });
-  assert.deepEqual(await detect({ "yarn.lock": "", ".yarnrc.yml": "" }), { "package-manager": "yarn", install: "yarn install --immutable" });
-  assert.deepEqual(await detect({ "yarn.lock": "", "package.json": '{"packageManager":"yarn@1.22.22"}' }), { "package-manager": "yarn", install: "yarn install --frozen-lockfile" });
-  assert.deepEqual(await detect({ "package.json": '{"packageManager":"pnpm@10.0.0"}' }), { "package-manager": "pnpm", install: "pnpm install --frozen-lockfile" });
+  assert.deepEqual(await detect({}), { "package-manager": "npm", lockfile: "package-lock.json", install: "npm ci", "node-version-file": "" });
+  assert.deepEqual(await detect({ "pnpm-lock.yaml": "", ".nvmrc": "26" }), { "package-manager": "pnpm", lockfile: "pnpm-lock.yaml", install: "pnpm install --frozen-lockfile", "node-version-file": "app/.nvmrc" });
+  assert.deepEqual(await detect({ "yarn.lock": "", ".yarnrc.yml": "" }), { "package-manager": "yarn", lockfile: "yarn.lock", install: "yarn install --immutable", "node-version-file": "" });
+  assert.deepEqual(await detect({ "yarn.lock": "", "package.json": '{"packageManager":"yarn@1.22.22"}' }), { "package-manager": "yarn", lockfile: "yarn.lock", install: "yarn install --frozen-lockfile", "node-version-file": "app/package.json" });
+  assert.deepEqual(await detect({ "package.json": '{"packageManager":"pnpm@10.0.0"}' }), { "package-manager": "pnpm", lockfile: "pnpm-lock.yaml", install: "pnpm install --frozen-lockfile", "node-version-file": "app/package.json" });
   assert.equal((await detect({ "package.json": "{" }))["package-manager"], "npm");
 });
 
 test("the reusable workflow defines each setup step once and reuses it", async () => {
   const workflow = await read(".github/workflows/testlanes.yml");
-  for (const anchor of ["checkout", "setup-node", "enable-corepack", "install", "download-plan"]) {
+  for (const anchor of ["checkout", "setup-node", "enable-corepack", "install", "install-command", "download-plan"]) {
     assert.equal(workflow.match(new RegExp(`- &${anchor}\n`, "gu"))?.length, 1, anchor);
   }
   assert.equal(workflow.match(/- \*install\n/gu)?.length, 2);
+  assert.equal(workflow.match(/- \*install-command\n/gu)?.length, 2);
 });
 
 test("the reusable workflow uploads shard artifacts even when tests fail", async () => {
@@ -117,13 +124,13 @@ test("the reusable workflow installs with install-node-version and tests with no
   assert.ok(testNode > workflow.indexOf("- name: Install Dependencies\n", workflow.indexOf("\n  test:\n")));
 });
 
-test("the reusable workflow sets up Node.js before running any JavaScript step", async () => {
+test("the reusable workflow needs no shell or Node.js on the runner for its own steps", async () => {
   const workflow = await read(".github/workflows/testlanes.yml");
-  const setupNode = workflow.indexOf("- &setup-node\n");
-  assert.ok(setupNode > 0);
-  assert.ok(setupNode < workflow.indexOf("shell: node {0}"), "Set Up Node runs before Detect Package Manager.");
-  assert.doesNotMatch(workflow, /TESTLANES_NODE_VERSION_FILE|TESTLANES_LOCKFILE/u);
-  assert.match(workflow, /node-version-file: \$\{\{ inputs\.install-node-version == '' && inputs\.node-version == '' && \(hashFiles\(/u);
+  const detect = workflow.indexOf("- name: Detect Package Manager\n");
+  assert.ok(detect > 0 && detect < workflow.indexOf("- &setup-node\n"), "Detect Package Manager runs first, on github-script.");
+  assert.match(workflow.slice(detect), /^- name: Detect Package Manager\n {8}id: tools\n(?: {8}#.*\n)? {8}uses: actions\/github-script@[0-9a-f]{40} # v9\.0\.0\n/u);
+  assert.doesNotMatch(workflow, /hashFiles|shell: node/u);
+  assert.match(workflow, /node-version-file: \$\{\{ inputs\.install-node-version == '' && inputs\.node-version == '' && env\.TESTLANES_NODE_VERSION_FILE \|\| '' \}\}/u);
 });
 
 test("the reusable workflow collects timings only on default-branch pushes", async () => {
