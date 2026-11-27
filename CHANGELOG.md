@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 (Next)
+## 0.3.0 (Next)
 
 - [#17](https://github.com/dblock/testlanes/pull/17): Set up Node.js before detecting the package manager, so self-hosted and other runners without Node.js work - [@dblock](https://github.com/dblock).
 - [#18](https://github.com/dblock/testlanes/pull/18): Skip the Collect Timings job except on default-branch pushes, which are the only runs that publish timings - [@dblock](https://github.com/dblock).
@@ -9,6 +9,7 @@
 - [#22](https://github.com/dblock/testlanes/pull/22): Accept a JSON runner group object, such as `{"group":"ci-runners","labels":["linux"]}`, in `runs-on` - [@dblock](https://github.com/dblock).
 - [#23](https://github.com/dblock/testlanes/pull/23): Fail with a clear error before spawning a test command over Windows' 32,767-character command-line limit - [@dblock](https://github.com/dblock).
 - [#16](https://github.com/dblock/testlanes/pull/16): Add npm-package-release benchmarks to the README - [@dblock](https://github.com/dblock).
+- [#25](https://github.com/dblock/testlanes/pull/25): Bump to 0.3.0, because the workflow's CLI steps changed: `testlanes github history` and `testlanes github prepare` are removed, so upgrade the `testlanes` package and the `testlanes.yml` reference together - [@dblock](https://github.com/dblock).
 - Your contribution here.
 
 ## 0.2.0 (2026/11/27)
