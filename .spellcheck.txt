@@ -11,5 +11,6 @@ Plug'n'Play
 SVG
 testlanes
 tinyglobby
+unsharded
 Vitest
 Vitest's

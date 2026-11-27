@@ -39,6 +39,14 @@ jobs:
 
 Vitest and Jest test files come from the runner's own listing (`vitest list` or `jest --listTests`), so your configuration's include and exclude settings apply. node:test cannot list files, so testlanes matches the default `node --test` patterns, such as `**/*.test.js` and `**/test/**/*.js`, outside `node_modules`; set `pattern` to select others, for example `test/**/*.test.js`. The first run groups files by size. Each successful push to the default branch records per-file timings, and later runs, including PRs, balance shards by those timings without updating them.
 
+### Benchmarks
+
+Four shards cut [npm-package-release](https://github.com/dblock/npm-package-release)'s slowest test worker from 199 to 90 seconds on Windows and 170 to 57.5 seconds on macOS.
+
+<img src="assets/npm-package-release-benchmarks.png" alt="Slowest worker test time per environment in npm-package-release: unsharded 46 to 199 seconds, and the median of four runs with four shards 31 to 90 seconds." width="640">
+
+Sources: [unsharded run](https://github.com/dblock/npm-package-release/actions/runs/45908637236), [four sharded runs](https://github.com/dblock/npm-package-release/actions/runs/46006042274) of [npm-package-release#69](https://github.com/dblock/npm-package-release/pull/69), and [the blog post](https://code.dblock.org/2026/11/26/automatic-javascript-test-sharding-on-github-actions.html).
+
 ### Coverage
 
 Wrap each shard's tests with a coverage tool and upload its report, then send every shard's report to your coverage service from a job of your own. With [c8](https://github.com/bcoe/c8) and [Coveralls](https://coveralls.io), which merges the reports:

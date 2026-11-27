@@ -8,6 +8,7 @@
 - [#21](https://github.com/dblock/testlanes/pull/21): Remove the Prepare job: each Test job plans for itself, a Shard Matrix job lists shards and finds the timing baseline once per run without checkout or install, and a Verify Shards job checks that all shards used one plan - [@dblock](https://github.com/dblock).
 - [#22](https://github.com/dblock/testlanes/pull/22): Accept a JSON runner group object, such as `{"group":"ci-runners","labels":["linux"]}`, in `runs-on` - [@dblock](https://github.com/dblock).
 - [#23](https://github.com/dblock/testlanes/pull/23): Fail with a clear error before spawning a test command over Windows' 32,767-character command-line limit - [@dblock](https://github.com/dblock).
+- [#16](https://github.com/dblock/testlanes/pull/16): Add npm-package-release benchmarks to the README - [@dblock](https://github.com/dblock).
 - Your contribution here.
 
 ## 0.2.0 (2026/11/27)
