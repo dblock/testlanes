@@ -42,7 +42,7 @@ No maintained npm library implements runtime-weighted multiway partitioning, so 
 | --- | --- |
 | Prepare | Find a timing baseline, write the immutable plan, and emit the `matrix.entry` list of shard numbers and names. |
 | Test | Run each planned shard and upload its measurements only if it passes. |
-| Collect | Validate and combine all shards' timings, publishing a baseline on default-branch pushes. |
+| Collect | On default-branch pushes only, validate and combine all shards' timings and publish a baseline; other runs skip this job. |
 
 Every job checks out the code without persisting credentials, sets up Node.js from `node-version` or the working directory's version file, detects npm, pnpm, or Yarn from the lockfile and `packageManager` field, and installs dependencies with `install-command` or the detected command. pnpm and Yarn are enabled through a pinned Corepack; only the npm download cache is restored, because `actions/setup-node` cannot locate their stores before Corepack installs them. Third-party actions are pinned by commit.
 

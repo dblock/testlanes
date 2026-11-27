@@ -3,6 +3,7 @@
 ## 0.2.1 (Next)
 
 - [#17](https://github.com/dblock/testlanes/pull/17): Set up Node.js before detecting the package manager, so self-hosted and other runners without Node.js work - [@dblock](https://github.com/dblock).
+- [#18](https://github.com/dblock/testlanes/pull/18): Skip the Collect Timings job except on default-branch pushes, which are the only runs that publish timings - [@dblock](https://github.com/dblock).
 - Your contribution here.
 
 ## 0.2.0 (2026/11/27)
