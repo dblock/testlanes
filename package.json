@@ -1,6 +1,6 @@
 {
   "name": "testlanes",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Runtime-balanced Vitest, Jest, and node:test shards for GitHub Actions, with timing history collected and reused automatically.",
   "type": "module",
   "bin": {

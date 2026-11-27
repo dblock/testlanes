@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 (Next)
+
+- Your contribution here.
+
 ## 0.2.0 (2026/11/27)
 
 - [#9](https://github.com/dblock/testlanes/pull/9): Remove the hard-coded `TESTLANES_VERSION` from the reusable workflow, which runs the caller's installed testlanes, so releases never edit workflow files that the release workflow's `GITHUB_TOKEN` cannot push - [@dblock](https://github.com/dblock).
