@@ -153,6 +153,29 @@ export function wrapperCommand(wrapper, cwd) {
   }
 }
 
+/** Longest command line Windows' CreateProcess accepts, in characters. */
+export const WINDOWS_COMMAND_LINE_LIMIT = 32767;
+
+/**
+ * Fails before spawning a command line Windows would reject, because every
+ * file in a shard is passed as an argument. Lengths follow libuv's quoting:
+ * arguments with spaces, tabs, or quotes are quoted and their quotes escaped.
+ *
+ * @param {string[]} command
+ * @param {NodeJS.Platform} [platform]
+ * @returns {void}
+ */
+export function checkCommandLine(command, platform = process.platform) {
+  if (platform !== "win32") return;
+  const length = command.reduce((total, arg) => {
+    const quoted = arg === "" || /[\s"]/u.test(arg);
+    return total + arg.length + (quoted ? 2 + (arg.match(/["\\]/gu)?.length ?? 0) : 0) + 1;
+  }, -1);
+  if (length > WINDOWS_COMMAND_LINE_LIMIT) {
+    throw new Error(`The test command is ${length} characters, over the Windows limit of ${WINDOWS_COMMAND_LINE_LIMIT}; use more shards or a narrower pattern.`);
+  }
+}
+
 /**
  * Runs a framework's executable with Node.js, optionally behind a wrapper command.
  *
@@ -164,6 +187,7 @@ export function wrapperCommand(wrapper, cwd) {
 export function execute(selected, args, { cwd, env = process.env, capture = false, wrapper = [] }) {
   const [executable, ...leading] = [...wrapperCommand(wrapper, cwd), ...selected.command(cwd)];
   return new Promise((resolvePromise, reject) => {
+    checkCommandLine([executable, ...leading, ...args]);
     const child = spawn(executable, [...leading, ...args], {
       cwd,
       env: selected.environment ? selected.environment(env) : env,

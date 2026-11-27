@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { frameworks, framework, nodeTestPatterns, packageBin, wrapperCommand } from "../src/frameworks.js";
+import { checkCommandLine, execute, frameworks, framework, nodeTestPatterns, packageBin, WINDOWS_COMMAND_LINE_LIMIT, wrapperCommand } from "../src/frameworks.js";
 import { partition } from "../src/partition.js";
 import { relativePath, validatePath } from "../src/paths.js";
 import { createPlan, fileMatrix, fingerprint, formatPlan, grouping, parsePlan, positiveInteger, testArguments, testWrapper, workerMatrix } from "../src/plan.js";
@@ -15,7 +15,7 @@ describe("paths", () => {
     assert.equal(relativePath("/repo", "/repo/specs/a.spec.js"), "specs/a.spec.js");
   });
 
-  for (const path of ["", "/abs.js", "C:/a.js", "a\\b.js", "a\nb.js", "../a.js", "a/../b.js", "./a.js", "a//b.js", 1]) {
+  for (const path of ["", "/abs.js", "C:/a.js", "c:a.js", "a\\b.js", "a\nb.js", "a\rb.js", "a\0b.js", "../a.js", "a/../b.js", "./a.js", "a//b.js", 1]) {
     test(`rejects ${JSON.stringify(path)}`, () => {
       assert.throws(() => validatePath(path), /Expected a relative repository path/u);
     });
@@ -188,5 +188,22 @@ describe("frameworks", () => {
     await import("node:fs/promises").then(({ mkdir }) => mkdir(fake, { recursive: true }));
     await writeFile(join(fake, "package.json"), '{"bin":{"other":"x.js"}}');
     assert.throws(() => packageBin("jest", directory), /jest does not declare a jest executable\./u);
+  });
+});
+
+describe("windows command line", () => {
+  test("counts quoting and fails over the CreateProcess limit only on Windows", () => {
+    const fits = ["node", "x".repeat(WINDOWS_COMMAND_LINE_LIMIT - 5)];
+    assert.doesNotThrow(() => checkCommandLine(fits, "win32"));
+    // Quoting a spaced argument adds two characters, pushing it over the limit.
+    const spaced = ["node", `${"x".repeat(WINDOWS_COMMAND_LINE_LIMIT - 7)} y`];
+    assert.throws(() => checkCommandLine(spaced, "win32"), /The test command is 32769 characters, over the Windows limit of 32767; use more shards or a narrower pattern\./u);
+    assert.throws(() => checkCommandLine(["node", 'a"b'.repeat(11000)], "win32"), /over the Windows limit/u);
+    assert.doesNotThrow(() => checkCommandLine(["node", "x".repeat(WINDOWS_COMMAND_LINE_LIMIT * 2)], "linux"));
+  });
+
+  test("rejects an oversized shard before spawning on Windows", { skip: process.platform !== "win32" && "Windows only" }, async () => {
+    const files = Array.from({ length: 2000 }, (_, index) => `C:/project/specs/a-long-directory-name/file-${index}.test.js`);
+    await assert.rejects(execute(framework("node"), files, { cwd: tmpdir() }), /over the Windows limit of 32767/u);
   });
 });
