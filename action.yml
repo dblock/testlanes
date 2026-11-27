@@ -37,8 +37,10 @@ runs:
   steps:
     - name: Plan Test Shards
       id: plan
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         TESTLANES_INPUTS: ${{ toJSON(inputs) }}
-      run: npx --no-install testlanes github matrix
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      with:
+        script: |
+          await exec.exec("npx", ["--no-install", "testlanes", "github", "matrix"], { cwd: process.env.WORKING_DIRECTORY });
