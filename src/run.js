@@ -35,7 +35,7 @@ export async function runShard({ plan: directory, shard, attempt, out, cwd, vers
   }
   await mkdir(out, { recursive: true });
   const measurements = resolve(out, "measurements.json");
-  await Promise.all(["result.json", "timings.json", "measurements.json"].map((file) => rm(join(out, file), { force: true })));
+  await Promise.all(["result.json", "timings.json", "measurements.json", "plan.json"].map((file) => rm(join(out, file), { force: true })));
   const selected = framework(plan.framework);
   const assigned = plan.groups[index - 1];
   const { code } = await execute(selected, selected.runArgs(assigned.map((file) => resolve(cwd, file)), plan.testArgs), {
@@ -59,6 +59,8 @@ export async function runShard({ plan: directory, shard, attempt, out, cwd, vers
   }
   await rm(measurements, { force: true });
   await writeTimings(join(out, "timings.json"), timings);
-  await writeFile(join(out, "result.json"), `${JSON.stringify({ plan: fingerprint(text), shard: index, attempt: generation })}\n`);
+  // The plan travels with the result, so collection needs no separately shared plan.
+  await writeFile(join(out, "plan.json"), text);
+  await writeFile(join(out, "result.json"), `${JSON.stringify({ plan: fingerprint(text), shard: index, shards: plan.groups.length, attempt: generation })}\n`);
   return 0;
 }

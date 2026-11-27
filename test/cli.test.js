@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { version } from "../src/index.js";
+import { fingerprint } from "../src/plan.js";
 import { cli, project } from "./support.js";
 
 for (const name of /** @type {const} */ (["vitest", "jest", "node"])) {
@@ -79,7 +80,7 @@ for (const name of /** @type {const} */ (["vitest", "jest", "node"])) {
 }
 
 describe("github workflow steps", () => {
-  test("prepare, run, and collect from workflow inputs and write step outputs", async () => {
+  test("plan and run each shard, then collect, from workflow inputs and write step outputs", async () => {
     const cwd = await project("node");
     const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
     const output = join(temp, "github-output");
@@ -90,23 +91,69 @@ describe("github workflow steps", () => {
       GITHUB_RUN_ATTEMPT: "3",
       ...extra,
     });
-    await writeFile(output, "");
-    const prepared = cli(["github", "prepare"], { cwd, env: env() });
-    assert.equal(prepared.code, 0, prepared.stderr);
-    const outputs = await readFile(output, "utf8");
-    assert.match(outputs, /^matrix=\[\{"shard":1,"name":"1 of 2"\},\{"shard":2,"name":"2 of 2"\}\]\ngroup-by=filesize\nshards=2\nartifact=lanes-plan-3\n$/u);
-    assert.deepEqual(JSON.parse(await readFile(join(temp, "testlanes", "plan", "plan.json"), "utf8")).testWrapper, ["c8", "--reporter=lcov"]);
+    /** @type {string[]} */
+    const plans = [];
     for (const shard of ["1", "2"]) {
       await writeFile(output, "");
       const ran = cli(["github", "run"], { cwd, env: env({ TESTLANES_SHARD: shard }) });
       assert.equal(ran.code, 0, ran.stderr);
+      assert.match(ran.stderr, /Prepared 2 shards of 5 files using filesize grouping\./u);
       assert.equal(await readFile(output, "utf8"), `artifact=lanes-shard-${shard}-3\n`);
-      await cp(join(temp, "testlanes", "result"), join(temp, "testlanes", "results", `lanes-shard-${shard}-3`), { recursive: true });
+      const result = join(temp, "testlanes", "result");
+      plans.push(await readFile(join(result, "plan.json"), "utf8"));
+      assert.deepEqual(JSON.parse(await readFile(join(result, "result.json"), "utf8")), { plan: fingerprint(plans[0]), shard: Number(shard), shards: 2, attempt: 3 });
+      await cp(result, join(temp, "testlanes", "results", `lanes-shard-${shard}-3`), { recursive: true });
     }
+    assert.equal(plans[0], plans[1], "Both shards planned identically.");
+    assert.deepEqual(JSON.parse(plans[0]).testWrapper, ["c8", "--reporter=lcov"]);
     assert.ok(existsSync(join(cwd, "coverage", "lcov.info")));
+    // Collect reads the plan from the shard results, not from a shared plan.
+    await rm(join(temp, "testlanes", "plan"), { recursive: true });
     const collected = cli(["github", "collect"], { cwd, env: env() });
     assert.equal(collected.code, 0, collected.stderr);
     assert.equal(Object.keys(JSON.parse(await readFile(join(temp, "testlanes", "baseline", "timings.json"), "utf8"))).length, 5);
+  });
+
+  test("passes shards beyond the file count without running tests", async () => {
+    const cwd = await project("node");
+    const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
+    const output = join(temp, "github-output");
+    await writeFile(output, "");
+    const env = { TESTLANES_INPUTS: JSON.stringify({ framework: "node", shards: 8 }), RUNNER_TEMP: temp, GITHUB_OUTPUT: output, TESTLANES_SHARD: "7" };
+    const ran = cli(["github", "run"], { cwd, env });
+    assert.equal(ran.code, 0, ran.stderr);
+    assert.match(ran.stderr, /Shard 7 has no files; the plan has 5 shards\./u);
+    assert.equal(await readFile(output, "utf8"), "");
+    assert.ok(!existsSync(join(temp, "testlanes", "result", "result.json")));
+  });
+
+  test("collect fails when no shard result includes its plan", async () => {
+    const cwd = await project("node");
+    const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
+    const env = { TESTLANES_INPUTS: JSON.stringify({ framework: "node" }), RUNNER_TEMP: temp };
+    assert.match(cli(["github", "collect"], { cwd, env }).stderr, /No shard result includes the plan it was produced from\./u);
+    const results = join(temp, "testlanes", "results", "lanes-shard-1-1");
+    await mkdir(results, { recursive: true });
+    await writeFile(join(results, "plan.json"), "{}\n");
+    await writeFile(join(results, "result.json"), '{"plan":"other","shard":1,"shards":1,"attempt":1}\n');
+    assert.match(cli(["github", "collect"], { cwd, env }).stderr, /No shard result includes the plan it was produced from\./u);
+  });
+
+  test("collect uses the newest attempt's plan after a full re-run", async () => {
+    const cwd = await project("node");
+    const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
+    const inputs = (/** @type {number} */ shards) => JSON.stringify({ framework: "node", shards, "artifact-prefix": "lanes" });
+    // Attempt 1 planned 1 shard; attempt 2, after re-running all jobs, planned 2.
+    for (const [attempt, shards] of [[1, 1], [2, 2]]) {
+      for (let shard = 1; shard <= shards; shard += 1) {
+        const env = { TESTLANES_INPUTS: inputs(shards), RUNNER_TEMP: temp, TESTLANES_SHARD: String(shard), GITHUB_RUN_ATTEMPT: String(attempt) };
+        assert.equal(cli(["github", "run"], { cwd, env }).code, 0);
+        await cp(join(temp, "testlanes", "result"), join(temp, "testlanes", "results", `lanes-shard-${shard}-${attempt}`), { recursive: true });
+      }
+    }
+    const collected = cli(["github", "collect"], { cwd, env: { TESTLANES_INPUTS: inputs(2), RUNNER_TEMP: temp } });
+    assert.equal(collected.code, 0, collected.stderr);
+    assert.equal(JSON.parse(await readFile(join(temp, "testlanes", "plan", "plan.json"), "utf8")).groups.length, 2);
   });
 
   test("writes no artifact output when a shard fails", async () => {
@@ -115,7 +162,6 @@ describe("github workflow steps", () => {
     const output = join(temp, "github-output");
     const env = { TESTLANES_INPUTS: JSON.stringify({ framework: "node", shards: 1 }), RUNNER_TEMP: temp, GITHUB_OUTPUT: output, TESTLANES_SHARD: "1" };
     await writeFile(join(cwd, "specs", "alpha.test.js"), 'import { test } from "node:test";\ntest("fails", () => { throw new Error("boom"); });\n');
-    assert.equal(cli(["github", "prepare"], { cwd, env }).code, 0);
     await writeFile(output, "");
     assert.equal(cli(["github", "run"], { cwd, env }).code, 1);
     assert.equal(await readFile(output, "utf8"), "");
@@ -142,14 +188,14 @@ describe("github workflow steps", () => {
     const base = { TESTLANES_INPUTS: '{"framework":"node"}', RUNNER_TEMP: temp };
     /** @type {[string[], Record<string, string>, RegExp][]} */
     const cases = [
-      [["github", "deploy"], base, /Unknown github step "deploy"; expected history, prepare, run, collect, or matrix\./u],
-      [["github"], base, /Unknown github step undefined; expected history, prepare, run, collect, or matrix\./u],
-      [["github", "prepare", "extra"], base, /Unexpected arguments: extra\./u],
-      [["github", "prepare"], { ...base, TESTLANES_INPUTS: "" }, /TESTLANES_INPUTS is not set\./u],
-      [["github", "prepare"], { ...base, TESTLANES_INPUTS: "{" }, /TESTLANES_INPUTS must be a JSON object of workflow inputs\./u],
-      [["github", "prepare"], { ...base, TESTLANES_INPUTS: "[]" }, /TESTLANES_INPUTS must be a JSON object of workflow inputs\./u],
-      [["github", "prepare"], { ...base, TESTLANES_INPUTS: '{"framework":"node","artifact-prefix":"a b"}' }, /Artifact prefix must contain only letters/u],
-      [["github", "prepare"], { ...base, RUNNER_TEMP: "" }, /RUNNER_TEMP is not set\./u],
+      [["github", "deploy"], base, /Unknown github step "deploy"; expected run, collect, or matrix\./u],
+      [["github"], base, /Unknown github step undefined; expected run, collect, or matrix\./u],
+      [["github", "run", "extra"], base, /Unexpected arguments: extra\./u],
+      [["github", "run"], { ...base, TESTLANES_INPUTS: "" }, /TESTLANES_INPUTS is not set\./u],
+      [["github", "run"], { ...base, TESTLANES_INPUTS: "{" }, /TESTLANES_INPUTS must be a JSON object of workflow inputs\./u],
+      [["github", "run"], { ...base, TESTLANES_INPUTS: "[]" }, /TESTLANES_INPUTS must be a JSON object of workflow inputs\./u],
+      [["github", "run"], { ...base, TESTLANES_INPUTS: '{"framework":"node","artifact-prefix":"a b"}' }, /Artifact prefix must contain only letters/u],
+      [["github", "run"], { ...base, RUNNER_TEMP: "" }, /RUNNER_TEMP is not set\./u],
       [["github", "run"], base, /TESTLANES_SHARD is not set\./u],
     ];
     for (const [args, env, message] of cases) {
@@ -157,7 +203,7 @@ describe("github workflow steps", () => {
       assert.equal(result.code, 1, args.join(" "));
       assert.match(result.stderr, message, args.join(" "));
     }
-    assert.match(cli(["github", "--help"], { cwd }).stdout, /Usage: testlanes github <history\|prepare\|run\|collect\|matrix>/u);
+    assert.match(cli(["github", "--help"], { cwd }).stdout, /Usage: testlanes github <run\|collect\|matrix>/u);
   });
 });
 

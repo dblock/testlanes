@@ -128,7 +128,7 @@ The `testlanes.yml` workflow accepts these inputs.
 | `max-parallel` | `256` | Maximum concurrent shards. |
 | `fail-fast` | `false` | Cancel other shards when one fails. |
 | `artifact-prefix` | `testlanes` | Unique artifact prefix when calling the workflow more than once in a workflow file. |
-| `artifact-retention-days` | `30` | Retention for plans and shard results; `0` uses the repository default. |
+| `artifact-retention-days` | `30` | Retention for shard results; `0` uses the repository default. |
 | `timings-retention-days` | `90` | Retention for trusted timing history; `0` uses the repository default. |
 
 The standalone action accepts `framework` (`vitest`, `jest`, or `node`), `working-directory`, `pattern`, `shards`, `group-by`, `test-args`, and `timings`, an optional testlanes timing file. It outputs `matrix`, an array of `shard` numbers and `files`, and the chosen `group-by`.
