@@ -18,11 +18,11 @@ The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types duri
 | `testlanes plan` | Selects files, chooses a grouping, partitions them, writes `plan.json`, and outputs a matrix. |
 | `testlanes run` | Verifies the plan and runs one shard, writing `timings.json` and a `result.json` marker only on success. |
 | `testlanes collect` | Validates every shard's newest report and merges their timings into a baseline. |
-| `testlanes history` | Finds the newest trusted baseline artifact through the GitHub REST API. |
 | `testlanes.yml` | Reusable workflow running Prepare, Test, and Collect jobs for the framework selected by its required `framework` input. |
-| `action.yml` | Standalone composite action that runs `testlanes plan` and outputs a file matrix. |
+| `testlanes github` | Runs the reusable workflow's history, prepare, run, and collect steps and the action's matrix step from `TESTLANES_INPUTS`. |
+| `action.yml` | Standalone composite action that runs `testlanes github matrix` and outputs a file matrix. |
 
-Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. The reusable workflow carries no version: callers pin its tag and install the matching `testlanes`, and it runs the installed version, so keeping the two matched is the caller's responsibility. Release references never edit `.github/workflows/`, which the release workflow's `GITHUB_TOKEN` cannot push. `action.yml` declares `TESTLANES_VERSION`, and planning fails when it differs from the installed package version.
+Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. The reusable workflow and the action carry no version: callers pin their tag and install the matching `testlanes`, and they run the installed version, so keeping the two matched is the caller's responsibility. Releases never edit `.github/workflows/`, which the release workflow's `GITHUB_TOKEN` cannot push, or `action.yml`.
 
 ## File Selection
 
@@ -44,7 +44,7 @@ No maintained npm library implements runtime-weighted multiway partitioning, so 
 | Test | Run each planned shard and upload its measurements only if it passes. |
 | Collect | Validate and combine all shards' timings, publishing a baseline on default-branch pushes. |
 
-Every job checks out the code without persisting credentials, detects npm, pnpm, or Yarn from the lockfile and `packageManager` field, sets up Node.js from `node-version` or the working directory's version file, and installs dependencies with `install-command` or the detected command. pnpm and Yarn are enabled through a pinned Corepack, and a second `actions/setup-node` call caches their stores once they are available. Third-party actions are pinned by commit.
+Every job checks out the code without persisting credentials, detects npm, pnpm, or Yarn from the lockfile and `packageManager` field, sets up Node.js from `node-version` or the working directory's version file, and installs dependencies with `install-command` or the detected command. pnpm and Yarn are enabled through a pinned Corepack; only the npm download cache is restored, because `actions/setup-node` cannot locate their stores before Corepack installs them. Third-party actions are pinned by commit.
 
 ### Install and Test Node.js
 
@@ -71,13 +71,13 @@ Artifacts are named `<prefix>-plan-<attempt>`, `<prefix>-shard-<shard>-<attempt>
 
 ### Workflow Steps
 
-Every step in `testlanes.yml` runs the same way on Linux, macOS, and Windows. The testlanes steps are one-line `npx --no-install testlanes github history|prepare|run|collect` commands that read the workflow's `toJSON(inputs)` from `TESTLANES_INPUTS` and the shard from `TESTLANES_SHARD`, keep files under `RUNNER_TEMP/testlanes`, validate the artifact prefix, and write step outputs, including artifact names, to `GITHUB_OUTPUT`. Keeping the logic in the CLI avoids duplicating shell code per OS and passing JSON or empty arguments through `npx`, which is a batch shim on Windows. Script files in this repository are not available in a caller's job, so the logic lives in the caller's installed package, as parallel_tests-ci does with `PTCI_INPUTS`.
+Every step in `testlanes.yml` runs the same way on Linux, macOS, and Windows. The testlanes steps are one-line `npx --no-install testlanes github history|prepare|run|collect` commands, and the action's is `testlanes github matrix`; they read the `toJSON(inputs)` from `TESTLANES_INPUTS` and the shard from `TESTLANES_SHARD`, keep files under `RUNNER_TEMP/testlanes`, validate the artifact prefix, and write step outputs, including artifact names, to `GITHUB_OUTPUT`. Keeping the logic in the CLI avoids duplicating shell code per OS and passing JSON or empty arguments through `npx`, which is a batch shim on Windows. Script files in this repository are not available in a caller's job, so the logic lives in the caller's installed package, as parallel_tests-ci does with `PTCI_INPUTS`.
 
-Package manager detection runs before testlanes is installed, so it is a short JavaScript step with `shell: node {0}`, using the Node.js that GitHub-hosted runners provide. It runs once, in Prepare, and passes its results to the Test and Collect jobs as job outputs; every job reads them as `TESTLANES_*` environment variables, so the checkout, Node.js, Corepack, cache, and install steps are defined once with YAML anchors and reused with aliases. `install-command` and `setup` are the caller's own scripts and run as the step body with the runner's default shell, Bash on Linux and macOS and PowerShell on Windows. The CLI resolves its working directory with `realpathSync.native`, because Windows temporary paths may use short names while test runners report long ones; it passes the node:test reporter as a file URL and Vitest forward-slash absolute paths.
+Package manager detection runs before testlanes is installed, so it is a short JavaScript step with `shell: node {0}`, using the Node.js that GitHub-hosted runners provide. It runs once, in Prepare, and passes its results to the Test and Collect jobs as job outputs; every job reads them as `TESTLANES_*` environment variables, so the checkout, Node.js, Corepack, and install steps are defined once with YAML anchors and reused with aliases. `install-command` and `setup` are the caller's own scripts and run as the step body with the runner's default shell, Bash on Linux and macOS and PowerShell on Windows. The CLI resolves its working directory with `realpathSync.native`, because Windows temporary paths may use short names while test runners report long ones; it passes the node:test reporter as a file URL and Vitest forward-slash absolute paths.
 
 ## Trust
 
-PRs, including forks, read history but never supply baselines. `testlanes history` looks through the current workflow's latest 20 successful default-branch push runs, keeps only same-repository push runs, and picks the newest unexpired `<prefix>-timings` artifact; lookup failures are warnings, not errors. Only Collect jobs of default-branch pushes publish baselines. Workflows use `contents: read` and `actions: read`, never execute artifacts, and never use `pull_request_target`. Unusable history is ignored with a warning.
+PRs, including forks, read history but never supply baselines. `testlanes github history` looks through the current workflow's latest 20 successful default-branch push runs, keeps only same-repository push runs, and picks the newest unexpired `<prefix>-timings` artifact; lookup failures are warnings, not errors. Only Collect jobs of default-branch pushes publish baselines. Workflows use `contents: read` and `actions: read`, never execute artifacts, and never use `pull_request_target`. Unusable history is ignored with a warning.
 
 ## Artwork
 

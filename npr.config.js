@@ -1,20 +1,12 @@
 import { HookValidator, IntrideaChangelog, ReleaseWorkflow } from "npm-package-release";
 
 const version = String.raw`(?<version>\d+\.\d+\.\d+)`;
-const testlanesVersion = new RegExp(String.raw`TESTLANES_VERSION: ${version}\n`, "u");
 
 /**
- * The standalone action passes `TESTLANES_VERSION` to `--expect-version`, and this repository's
- * integration workflows run it against its own package, so it follows the package version: the
- * release tag names the released version and the next-development commit names the next one.
- * References never name files under `.github/workflows/`: the release workflow's `GITHUB_TOKEN`
- * cannot push changes to workflow files, so the reusable workflow carries no version.
+ * README pins that callers copy always name a published version, in both commits. Neither
+ * release commit changes the reusable workflow or the action, which run the caller's installed
+ * testlanes and carry no version; the release workflow's `GITHUB_TOKEN` cannot push workflow files.
  */
-export const versionReferences = Object.freeze({
-  "action.yml": [testlanesVersion],
-});
-
-/** README pins that callers copy always name a published version, in both commits. */
 export const releaseReferences = Object.freeze({
   "README.md": [
     new RegExp(String.raw`npm install --save-dev testlanes@${version}(?![\w.+-])`, "u"),
@@ -31,7 +23,6 @@ export const releaseReferences = Object.freeze({
 export function createReleaseWorkflow(services = {}) {
   return new ReleaseWorkflow({
     changelog: new IntrideaChangelog("CHANGELOG.md"),
-    versionReferences,
     releaseReferences,
     validator: new HookValidator({
       async validateArtifact({ archive, run }) {

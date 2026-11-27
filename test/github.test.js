@@ -63,7 +63,7 @@ describe("github", () => {
     assert.ok(requests.every((line) => line.startsWith("Bearer token ")));
     assert.ok(!requests.some((line) => /runs\/[1-4]\/artifacts/u.test(line)));
 
-    const result = await cli(["history", "--prefix", "lanes"], { cwd: tmpdir(), env });
+    const result = await cli(["github", "history"], { cwd: tmpdir(), env: { ...env, TESTLANES_INPUTS: '{"artifact-prefix":"lanes"}', RUNNER_TEMP: tmpdir() } });
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stderr, /Found timing history in run 6\./u);
     assert.equal(await readFile(env.GITHUB_OUTPUT, "utf8"), "history-run=6\nhistory-artifact=60\n");
@@ -83,11 +83,11 @@ describe("github", () => {
     };
     const env = await environment();
     assert.equal(await findHistory({ prefix: "lanes", env }), undefined);
-    const none = await cli(["history", "--prefix", "lanes"], { cwd: tmpdir(), env });
+    const none = await cli(["github", "history"], { cwd: tmpdir(), env: { ...env, TESTLANES_INPUTS: '{"artifact-prefix":"lanes"}', RUNNER_TEMP: tmpdir() } });
     assert.equal(none.code, 0);
     assert.match(none.stderr, /No trusted timing history was found\./u);
     routes = {};
-    const failed = await cli(["history"], { cwd: tmpdir(), env });
+    const failed = await cli(["github", "history"], { cwd: tmpdir(), env: { ...env, TESTLANES_INPUTS: "{}", RUNNER_TEMP: tmpdir() } });
     assert.equal(failed.code, 0);
     assert.match(failed.stderr, /Timing history unavailable: GitHub API request for repos\/owner\/repo\/actions\/runs\/7 failed with status 404\./u);
     assert.equal(await readFile(env.GITHUB_OUTPUT, "utf8"), "");
@@ -106,7 +106,7 @@ describe("github", () => {
     const env = await environment();
     await writeOutputs({ a: 1 }, { GITHUB_OUTPUT: "" });
     await assert.rejects(writeOutputs({ a: "x\ny" }, env), /Output a must be a single line\./u);
-    const result = await cli(["history", "--prefix", "bad prefix"], { cwd: tmpdir(), env });
-    assert.match(result.stderr, /Timing history unavailable: Artifact prefix must contain only letters/u);
+    const result = await cli(["github", "history"], { cwd: tmpdir(), env: { ...env, TESTLANES_INPUTS: '{"artifact-prefix":"bad prefix"}', RUNNER_TEMP: tmpdir() } });
+    assert.match(result.stderr, /testlanes: Artifact prefix must contain only letters/u);
   });
 });

@@ -15,10 +15,10 @@ for (const name of /** @type {const} */ (["vitest", "jest", "node"])) {
       const work = await mkdtemp(join(tmpdir(), "testlanes-work-"));
       const output = join(work, "github-output");
       await writeFile(output, "");
-      const planned = cli(["plan", "--framework", name, "--shards", "2", "--out", join(work, "plan"), "--matrix", "workers", "--expect-version", version], { cwd, env: { GITHUB_OUTPUT: output } });
+      const planned = cli(["plan", "--framework", name, "--shards", "2", "--out", join(work, "plan")], { cwd, env: { GITHUB_OUTPUT: output } });
       assert.equal(planned.code, 0, planned.stderr);
       assert.match(planned.stderr, /Prepared 2 shards of 5 files using filesize grouping\./u);
-      assert.deepEqual(JSON.parse(planned.stdout), [{ shard: 1, name: "1 of 2" }, { shard: 2, name: "2 of 2" }]);
+      assert.deepEqual(JSON.parse(planned.stdout).map((/** @type {{ shard: number }} */ entry) => entry.shard), [1, 2]);
       assert.match(await readFile(output, "utf8"), /^matrix=\[.+\]\ngroup-by=filesize\nshards=2\n$/u);
 
       const plan = JSON.parse(await readFile(join(work, "plan", "plan.json"), "utf8"));
@@ -121,14 +121,29 @@ describe("github workflow steps", () => {
     assert.equal(await readFile(output, "utf8"), "");
   });
 
+  test("plans a file matrix for the standalone action without RUNNER_TEMP", async () => {
+    const cwd = await project("node");
+    const work = await mkdtemp(join(tmpdir(), "testlanes-work-"));
+    const output = join(work, "github-output");
+    await writeFile(output, "");
+    await writeFile(join(cwd, "timings.json"), '{"specs/alpha.test.js":4,"specs/bravo.test.js":3,"specs/charlie.test.js":1}');
+    const env = { TESTLANES_INPUTS: JSON.stringify({ framework: "node", shards: "2", "group-by": "runtime", timings: "timings.json", "working-directory": "." }), RUNNER_TEMP: "", GITHUB_OUTPUT: output };
+    const planned = cli(["github", "matrix"], { cwd, env });
+    assert.equal(planned.code, 0, planned.stderr);
+    const outputs = await readFile(output, "utf8");
+    assert.match(outputs, /\ngroup-by=runtime\nshards=2\n$/u);
+    const matrix = JSON.parse(/^matrix=(.+)$/mu.exec(outputs)?.[1] ?? "[]");
+    assert.deepEqual(matrix.flatMap((/** @type {{ files: string[] }} */ entry) => entry.files).sort(), ["alpha", "bravo", "charlie", "delta", "nested/echo"].map((spec) => `specs/${spec}.test.js`));
+  });
+
   test("rejects invalid workflow steps and inputs", async () => {
     const cwd = await project("node");
     const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
     const base = { TESTLANES_INPUTS: '{"framework":"node"}', RUNNER_TEMP: temp };
     /** @type {[string[], Record<string, string>, RegExp][]} */
     const cases = [
-      [["github", "deploy"], base, /Unknown github step "deploy"; expected history, prepare, run, or collect\./u],
-      [["github"], base, /Unknown github step undefined; expected history, prepare, run, or collect\./u],
+      [["github", "deploy"], base, /Unknown github step "deploy"; expected history, prepare, run, collect, or matrix\./u],
+      [["github"], base, /Unknown github step undefined; expected history, prepare, run, collect, or matrix\./u],
       [["github", "prepare", "extra"], base, /Unexpected arguments: extra\./u],
       [["github", "prepare"], { ...base, TESTLANES_INPUTS: "" }, /TESTLANES_INPUTS is not set\./u],
       [["github", "prepare"], { ...base, TESTLANES_INPUTS: "{" }, /TESTLANES_INPUTS must be a JSON object of workflow inputs\./u],
@@ -142,7 +157,7 @@ describe("github workflow steps", () => {
       assert.equal(result.code, 1, args.join(" "));
       assert.match(result.stderr, message, args.join(" "));
     }
-    assert.match(cli(["github", "--help"], { cwd }).stdout, /Usage: testlanes github <history\|prepare\|run\|collect>/u);
+    assert.match(cli(["github", "--help"], { cwd }).stdout, /Usage: testlanes github <history\|prepare\|run\|collect\|matrix>/u);
   });
 });
 
@@ -204,7 +219,7 @@ describe("command line", () => {
     const bare = cli([], { cwd });
     assert.equal(bare.code, 1);
     assert.match(bare.stdout, /Commands:/u);
-    for (const command of ["plan", "run", "collect", "history"]) {
+    for (const command of ["plan", "run", "collect", "github"]) {
       const help = cli([command, "--help"], { cwd });
       assert.equal(help.code, 0);
       assert.match(help.stdout, new RegExp(`Usage: testlanes ${command}`, "u"));
@@ -218,11 +233,9 @@ describe("command line", () => {
       [["deploy"], /Unknown command "deploy"\./u],
       [["plan", "--bogus"], /Unknown option '--bogus'/u],
       [["plan"], /Missing required option --framework\./u],
-      [["plan", "--framework", "vitest", "--matrix", "rows"], /Invalid matrix "rows"; expected files or workers\./u],
       [["plan", "--framework", "vitest", "--test-args=--ci"], /Test arguments must be a JSON array of strings\./u],
       [["plan", "--framework", "vitest", "--test-args", "[1]"], /Test arguments must be a JSON array of strings\./u],
       [["plan", "--framework", "vitest", "--test-wrapper", "c8"], /The test wrapper must be a JSON array of strings starting with a command\./u],
-      [["plan", "--framework", "vitest", "--expect-version", "9.9.9"], /version 9\.9\.9 was expected; keep the package and workflow versions matched\./u],
       [["plan", "--framework", "vitest", "--group-by", "runtime"], /Runtime grouping requires timings for at least half the selected files\./u],
       [["plan", "--framework", "vitest", "--pattern", "nothing/*.js"], /No test files match "nothing\/\*\.js"\./u],
       [["plan", "--framework", "vitest", "--test-args", '["--project","missing"]'], /Listing vitest test files failed with exit code 1\./u],

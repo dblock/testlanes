@@ -145,15 +145,6 @@ jobs:
         name: Enable Corepack
         if: env.TESTLANES_PACKAGE_MANAGER != 'npm'
         run: npm install --global corepack@0.36.0 && corepack enable
-      - &cache-store
-        name: Cache Package Manager Store
-        if: env.TESTLANES_PACKAGE_MANAGER != 'npm'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ inputs.install-node-version || inputs.node-version }}
-          node-version-file: ${{ inputs.install-node-version == '' && inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
-          cache: ${{ env.TESTLANES_PACKAGE_MANAGER }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ env.TESTLANES_LOCKFILE }}
       - &install
         name: Install Dependencies
         working-directory: ${{ inputs.working-directory }}
@@ -210,7 +201,6 @@ jobs:
       - *checkout
       - *setup-node
       - *enable-corepack
-      - *cache-store
       - *install
       - &download-plan
         name: Download Shared Plan
@@ -269,7 +259,6 @@ jobs:
       - *checkout
       - *setup-node
       - *enable-corepack
-      - *cache-store
       - *install
       - *download-plan
       - name: Download Measurements

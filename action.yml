@@ -40,15 +40,5 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        # Updated by each release so plans fail when the caller's package version differs.
-        TESTLANES_VERSION: 0.2.0
-        FRAMEWORK: ${{ inputs.framework }}
-        PATTERN: ${{ inputs.pattern }}
-        SHARDS: ${{ inputs.shards }}
-        TIMINGS: ${{ inputs.timings }}
-        GROUP_BY: ${{ inputs.group-by }}
-        TEST_ARGS: ${{ inputs.test-args }}
-      run: >-
-        npx --no-install testlanes plan --framework "$FRAMEWORK" --shards "$SHARDS" --group-by "$GROUP_BY"
-        --pattern "$PATTERN" --timings "$TIMINGS" --test-args "$TEST_ARGS" --matrix files
-        --expect-version "$TESTLANES_VERSION"
+        TESTLANES_INPUTS: ${{ toJSON(inputs) }}
+      run: npx --no-install testlanes github matrix

@@ -10,8 +10,10 @@ import { root } from "./support.js";
 /** @param {string} path */
 const read = (path) => readFile(join(root, path), "utf8");
 
-test("the action version matches the package version", async () => {
-  assert.match(await read("action.yml"), new RegExp(`TESTLANES_VERSION: ${version.replaceAll(".", "\\.")}\\n`, "u"));
+test("the action runs testlanes github matrix and pins no version", async () => {
+  const action = await read("action.yml");
+  assert.doesNotMatch(action, /TESTLANES_VERSION|--expect-version/u);
+  assert.match(action, /run: npx --no-install testlanes github matrix\n/u);
 });
 
 test("the reusable workflow pins no testlanes version", async () => {
@@ -19,10 +21,11 @@ test("the reusable workflow pins no testlanes version", async () => {
   assert.doesNotMatch(workflow, /TESTLANES_VERSION|--expect-version/u);
 });
 
-test("release references never edit workflow files", async () => {
-  const { releaseReferences, versionReferences } = await import("../npr.config.js");
-  for (const path of [...Object.keys(versionReferences), ...Object.keys(releaseReferences)]) {
-    assert.ok(!path.startsWith(".github/workflows/"), `${path} is a workflow file.`);
+test("release references never edit workflow files or the action", async () => {
+  const config = await import("../npr.config.js");
+  assert.equal(Object.hasOwn(config, "versionReferences"), false);
+  for (const path of Object.keys(config.releaseReferences)) {
+    assert.ok(!path.startsWith(".github/workflows/") && path !== "action.yml", `${path} carries no version.`);
   }
 });
 
@@ -95,7 +98,7 @@ test("the package manager detection step reads lockfiles, packageManager, and ve
 
 test("the reusable workflow defines each setup step once and reuses it", async () => {
   const workflow = await read(".github/workflows/testlanes.yml");
-  for (const anchor of ["checkout", "setup-node", "enable-corepack", "cache-store", "install", "download-plan"]) {
+  for (const anchor of ["checkout", "setup-node", "enable-corepack", "install", "download-plan"]) {
     assert.equal(workflow.match(new RegExp(`- &${anchor}\n`, "gu"))?.length, 1, anchor);
   }
   assert.equal(workflow.match(/- \*install\n/gu)?.length, 2);
@@ -109,7 +112,7 @@ test("the reusable workflow uploads shard artifacts even when tests fail", async
 
 test("the reusable workflow installs with install-node-version and tests with node-version", async () => {
   const workflow = await read(".github/workflows/testlanes.yml");
-  assert.equal(workflow.match(/node-version: \$\{\{ inputs\.install-node-version \|\| inputs\.node-version \}\}\n/gu)?.length, 2);
+  assert.equal(workflow.match(/node-version: \$\{\{ inputs\.install-node-version \|\| inputs\.node-version \}\}\n/gu)?.length, 1);
   const testNode = workflow.indexOf("- name: Set Up Test Node\n        if: inputs.install-node-version != ''\n");
   assert.ok(testNode > 0);
   assert.ok(testNode < workflow.indexOf("- name: Set Up Application\n"));
