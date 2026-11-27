@@ -72,6 +72,7 @@ jobs:
       timeout-minutes: 15
       max-parallel: 1
       fail-fast: true
+      install-node-version: '26.13.1'
       node-version: '24.22.3'
       working-directory: fixtures/${{ matrix.entry.framework }}
       install-command: npm ci --prefix ../.. && npm ci

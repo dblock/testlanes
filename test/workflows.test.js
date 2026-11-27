@@ -106,3 +106,12 @@ test("the reusable workflow uploads shard artifacts even when tests fail", async
   assert.match(workflow, /- name: Upload Test Artifacts\n {8}if: always\(\) && inputs\.artifacts != ''\n/u);
   assert.match(workflow, /name: \$\{\{ inputs\.artifact-prefix \}\}-artifacts-\$\{\{ matrix\.entry\.shard \}\}\n/u);
 });
+
+test("the reusable workflow installs with install-node-version and tests with node-version", async () => {
+  const workflow = await read(".github/workflows/testlanes.yml");
+  assert.equal(workflow.match(/node-version: \$\{\{ inputs\.install-node-version \|\| inputs\.node-version \}\}\n/gu)?.length, 2);
+  const testNode = workflow.indexOf("- name: Set Up Test Node\n        if: inputs.install-node-version != ''\n");
+  assert.ok(testNode > 0);
+  assert.ok(testNode < workflow.indexOf("- name: Set Up Application\n"));
+  assert.ok(testNode > workflow.indexOf("- name: Install Dependencies\n", workflow.indexOf("\n  test:\n")));
+});

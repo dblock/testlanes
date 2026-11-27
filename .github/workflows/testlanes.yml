@@ -23,6 +23,10 @@ on:
         description: Cancel queued and running workers when a worker fails.
         type: boolean
         default: false
+      install-node-version:
+        description: Node.js version for installing dependencies, planning, and collecting timings (empty uses the test Node.js).
+        type: string
+        default: ''
       node-version:
         description: Node.js version (empty reads .nvmrc, .node-version, or package.json in the working directory).
         type: string
@@ -133,8 +137,8 @@ jobs:
         name: Set Up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
+          node-version: ${{ inputs.install-node-version || inputs.node-version }}
+          node-version-file: ${{ inputs.install-node-version == '' && inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
           cache: ${{ env.TESTLANES_PACKAGE_MANAGER == 'npm' && 'npm' || '' }}
           cache-dependency-path: ${{ inputs.working-directory }}/${{ env.TESTLANES_LOCKFILE }}
       - &enable-corepack
@@ -146,8 +150,8 @@ jobs:
         if: env.TESTLANES_PACKAGE_MANAGER != 'npm'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
+          node-version: ${{ inputs.install-node-version || inputs.node-version }}
+          node-version-file: ${{ inputs.install-node-version == '' && inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
           cache: ${{ env.TESTLANES_PACKAGE_MANAGER }}
           cache-dependency-path: ${{ inputs.working-directory }}/${{ env.TESTLANES_LOCKFILE }}
       - &install
@@ -214,6 +218,13 @@ jobs:
         with:
           name: ${{ needs.prepare.outputs.artifact }}
           path: ${{ runner.temp }}/testlanes/plan
+      - name: Set Up Test Node
+        if: inputs.install-node-version != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          node-version-file: ${{ inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
+          package-manager-cache: false
       - name: Set Up Application
         if: inputs.setup != ''
         working-directory: ${{ inputs.working-directory }}
