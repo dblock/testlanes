@@ -11,6 +11,7 @@ export const MAX_SHARDS = 256;
  * @property {string} framework
  * @property {string | null} pattern
  * @property {string[]} testArgs
+ * @property {string[]} testWrapper Command prefix for running tests, such as a coverage tool.
  * @property {"filesize" | "runtime"} groupBy
  * @property {Record<string, number>} files Selected files and their sizes in bytes.
  * @property {string[][]} groups Files assigned to each shard, in shard order.
@@ -38,6 +39,19 @@ export function positiveInteger(value, name) {
 export function testArguments(value) {
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
     throw new Error("Test arguments must be a JSON array of strings.");
+  }
+  return value;
+}
+
+/**
+ * Validates a test wrapper: a command and its arguments that run before the test runner.
+ *
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+export function testWrapper(value) {
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string") || value[0] === "") {
+    throw new Error("The test wrapper must be a JSON array of strings starting with a command.");
   }
   return value;
 }
@@ -73,9 +87,10 @@ export function grouping(requested, known, total) {
  * @param {Record<string, number>} [options.timings]
  * @param {string | null} [options.pattern]
  * @param {string[]} [options.testArgs]
+ * @param {string[]} [options.testWrapper]
  * @returns {Plan}
  */
-export function createPlan({ version, framework: name, files, shards = 4, groupBy = "auto", timings = {}, pattern = null, testArgs = [] }) {
+export function createPlan({ version, framework: name, files, shards = 4, groupBy = "auto", timings = {}, pattern = null, testArgs = [], testWrapper: wrapper = [] }) {
   framework(name);
   const requested = positiveInteger(shards, "shards");
   if (requested > MAX_SHARDS) throw new Error(`GitHub Actions allows at most ${MAX_SHARDS} shards.`);
@@ -104,6 +119,7 @@ export function createPlan({ version, framework: name, files, shards = 4, groupB
     framework: name,
     pattern,
     testArgs: testArguments(testArgs),
+    testWrapper: testWrapper(wrapper),
     groupBy: mode,
     files: sorted,
     groups: partition(weights, Math.min(requested, paths.length)),
@@ -141,6 +157,7 @@ export function parsePlan(text) {
   }
   framework(plan.framework);
   testArguments(plan.testArgs);
+  testWrapper(plan.testWrapper);
   Object.keys(files).forEach(validatePath);
   return plan;
 }

@@ -135,15 +135,34 @@ export function packageBin(name, cwd) {
 }
 
 /**
- * Runs a framework's executable with Node.js.
+ * Resolves a test wrapper's command. A command naming an installed package's
+ * executable, such as `c8`, runs that executable with Node.js, which also
+ * avoids spawning `.cmd` shims on Windows; any other command runs as given.
+ *
+ * @param {string[]} wrapper
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+export function wrapperCommand(wrapper, cwd) {
+  if (wrapper.length === 0) return [];
+  const [command, ...rest] = wrapper;
+  try {
+    return [process.execPath, packageBin(command, cwd), ...rest];
+  } catch {
+    return wrapper;
+  }
+}
+
+/**
+ * Runs a framework's executable with Node.js, optionally behind a wrapper command.
  *
  * @param {Framework} selected
  * @param {string[]} args
- * @param {{ cwd: string, env?: NodeJS.ProcessEnv, capture?: boolean }} options
+ * @param {{ cwd: string, env?: NodeJS.ProcessEnv, capture?: boolean, wrapper?: string[] }} options
  * @returns {Promise<{ code: number, stdout: string }>}
  */
-export function execute(selected, args, { cwd, env = process.env, capture = false }) {
-  const [executable, ...leading] = selected.command(cwd);
+export function execute(selected, args, { cwd, env = process.env, capture = false, wrapper = [] }) {
+  const [executable, ...leading] = [...wrapperCommand(wrapper, cwd), ...selected.command(cwd)];
   return new Promise((resolvePromise, reject) => {
     const child = spawn(executable, [...leading, ...args], {
       cwd,

@@ -84,7 +84,7 @@ describe("github workflow steps", () => {
     const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
     const output = join(temp, "github-output");
     const env = (/** @type {Record<string, string>} */ extra = {}) => ({
-      TESTLANES_INPUTS: JSON.stringify({ framework: "node", shards: 2, "group-by": "auto", pattern: "", "test-args": "[]", "artifact-prefix": "lanes", setup: "" }),
+      TESTLANES_INPUTS: JSON.stringify({ framework: "node", shards: 2, "group-by": "auto", pattern: "", "test-args": "[]", "test-wrapper": '["c8","--reporter=lcov"]', "artifact-prefix": "lanes", setup: "" }),
       RUNNER_TEMP: temp,
       GITHUB_OUTPUT: output,
       GITHUB_RUN_ATTEMPT: "3",
@@ -95,7 +95,7 @@ describe("github workflow steps", () => {
     assert.equal(prepared.code, 0, prepared.stderr);
     const outputs = await readFile(output, "utf8");
     assert.match(outputs, /^matrix=\[\{"shard":1,"name":"1 of 2"\},\{"shard":2,"name":"2 of 2"\}\]\ngroup-by=filesize\nshards=2\nartifact=lanes-plan-3\n$/u);
-    assert.ok(existsSync(join(temp, "testlanes", "plan", "plan.json")));
+    assert.deepEqual(JSON.parse(await readFile(join(temp, "testlanes", "plan", "plan.json"), "utf8")).testWrapper, ["c8", "--reporter=lcov"]);
     for (const shard of ["1", "2"]) {
       await writeFile(output, "");
       const ran = cli(["github", "run"], { cwd, env: env({ TESTLANES_SHARD: shard }) });
@@ -103,6 +103,7 @@ describe("github workflow steps", () => {
       assert.equal(await readFile(output, "utf8"), `artifact=lanes-shard-${shard}-3\n`);
       await cp(join(temp, "testlanes", "result"), join(temp, "testlanes", "results", `lanes-shard-${shard}-3`), { recursive: true });
     }
+    assert.ok(existsSync(join(cwd, "coverage", "lcov.info")));
     const collected = cli(["github", "collect"], { cwd, env: env() });
     assert.equal(collected.code, 0, collected.stderr);
     assert.equal(Object.keys(JSON.parse(await readFile(join(temp, "testlanes", "baseline", "timings.json"), "utf8"))).length, 5);
@@ -142,6 +143,19 @@ describe("github workflow steps", () => {
       assert.match(result.stderr, message, args.join(" "));
     }
     assert.match(cli(["github", "--help"], { cwd }).stdout, /Usage: testlanes github <history\|prepare\|run\|collect>/u);
+  });
+});
+
+describe("test wrapper", () => {
+  test("runs shards behind an installed package's executable", async () => {
+    const cwd = await project("node");
+    const work = await mkdtemp(join(tmpdir(), "testlanes-work-"));
+    const planned = cli(["plan", "--framework", "node", "--shards", "2", "--out", join(work, "plan"), "--test-wrapper", '["c8","--reporter=lcov","--report-dir=coverage"]'], { cwd });
+    assert.equal(planned.code, 0, planned.stderr);
+    const ran = cli(["run", "--plan", join(work, "plan"), "--shard", "1", "--out", join(work, "result")], { cwd });
+    assert.equal(ran.code, 0, ran.stderr);
+    assert.ok(existsSync(join(cwd, "coverage", "lcov.info")));
+    assert.ok(existsSync(join(work, "result", "result.json")));
   });
 });
 
@@ -207,6 +221,7 @@ describe("command line", () => {
       [["plan", "--framework", "vitest", "--matrix", "rows"], /Invalid matrix "rows"; expected files or workers\./u],
       [["plan", "--framework", "vitest", "--test-args=--ci"], /Test arguments must be a JSON array of strings\./u],
       [["plan", "--framework", "vitest", "--test-args", "[1]"], /Test arguments must be a JSON array of strings\./u],
+      [["plan", "--framework", "vitest", "--test-wrapper", "c8"], /The test wrapper must be a JSON array of strings starting with a command\./u],
       [["plan", "--framework", "vitest", "--expect-version", "9.9.9"], /version 9\.9\.9 was expected; keep the package and workflow versions matched\./u],
       [["plan", "--framework", "vitest", "--group-by", "runtime"], /Runtime grouping requires timings for at least half the selected files\./u],
       [["plan", "--framework", "vitest", "--pattern", "nothing/*.js"], /No test files match "nothing\/\*\.js"\./u],

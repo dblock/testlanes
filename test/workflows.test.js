@@ -100,3 +100,9 @@ test("the reusable workflow defines each setup step once and reuses it", async (
   }
   assert.equal(workflow.match(/- \*install\n/gu)?.length, 2);
 });
+
+test("the reusable workflow uploads shard artifacts even when tests fail", async () => {
+  const workflow = await read(".github/workflows/testlanes.yml");
+  assert.match(workflow, /- name: Upload Test Artifacts\n {8}if: always\(\) && inputs\.artifacts != ''\n/u);
+  assert.match(workflow, /name: \$\{\{ inputs\.artifact-prefix \}\}-artifacts-\$\{\{ matrix\.entry\.shard \}\}\n/u);
+});
