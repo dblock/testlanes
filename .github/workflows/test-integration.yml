@@ -111,7 +111,8 @@ jobs:
       runs-on: windows-latest
       working-directory: fixtures/${{ matrix.entry.framework }}
       install-command: npm ci --prefix ../.. && npm ci
-      setup: if ($env:OS -ne 'Windows_NT') { exit 1 }
+      # Proves the caller's scripts run in PowerShell 7 on Windows, not Windows PowerShell or Bash.
+      setup: if ($PSVersionTable.PSEdition -ne 'Core' -or $env:OS -ne 'Windows_NT') { exit 1 }
       shards: 2
       artifact-prefix: integration-windows-${{ matrix.entry.framework }}
 
