@@ -75,6 +75,8 @@ jobs:
         entry:
           - { framework: vitest, runner: macos-latest, kernel: Darwin, pattern: 'specs/*.spec.js' }
           - { framework: jest, runner: '["ubuntu-latest"]', kernel: Linux, pattern: '' }
+          # A runner group object, as used for self-hosted groups; a real group needs an organization.
+          - { framework: node, runner: '{"labels":["ubuntu-latest"]}', kernel: Linux, pattern: '' }
     uses: ./.github/workflows/testlanes.yml
     with:
       framework: ${{ matrix.entry.framework }}

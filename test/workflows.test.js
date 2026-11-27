@@ -262,3 +262,10 @@ test("the matrix job finds the newest trusted, unexpired baseline once per run",
   const failed = await lookup({ fail: true });
   assert.deepEqual([failed.outputs, failed.warnings], [{}, ["Timing history unavailable: Not Found"]]);
 });
+
+test("every job accepts a runner label, label array, or runner group object", async () => {
+  const workflow = await read(".github/workflows/testlanes.yml");
+  const runsOn = [...workflow.matchAll(/^ {4}runs-on: (.+)$/gmu)].map((match) => match[1]);
+  assert.equal(runsOn.length, 4);
+  for (const value of runsOn) assert.equal(value, "${{ (startsWith(inputs.runs-on, '[') || startsWith(inputs.runs-on, '{')) && fromJSON(inputs.runs-on) || inputs.runs-on }}");
+});

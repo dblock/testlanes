@@ -6,6 +6,7 @@
 - [#18](https://github.com/dblock/testlanes/pull/18): Skip the Collect Timings job except on default-branch pushes, which are the only runs that publish timings - [@dblock](https://github.com/dblock).
 - [#19](https://github.com/dblock/testlanes/pull/19): Run testlanes' own workflow and action steps on `actions/github-script`, so runners need no shell or preinstalled Node.js unless `install-command` or `setup` is set - [@dblock](https://github.com/dblock).
 - [#21](https://github.com/dblock/testlanes/pull/21): Remove the Prepare job: each Test job plans for itself, a Shard Matrix job lists shards and finds the timing baseline once per run without checkout or install, and a Verify Shards job checks that all shards used one plan - [@dblock](https://github.com/dblock).
+- [#22](https://github.com/dblock/testlanes/pull/22): Accept a JSON runner group object, such as `{"group":"ci-runners","labels":["linux"]}`, in `runs-on` - [@dblock](https://github.com/dblock).
 - Your contribution here.
 
 ## 0.2.0 (2026/11/27)
