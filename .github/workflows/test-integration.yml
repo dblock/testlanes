@@ -57,6 +57,16 @@ jobs:
       - name: Check One Coverage Report per Shard
         run: test "$(find artifacts -name lcov.info | wc -l)" -eq 2
 
+  pnpm:
+    name: Exercise pnpm Project
+    uses: ./.github/workflows/testlanes.yml
+    with:
+      framework: node
+      working-directory: fixtures/pnpm
+      setup: test -d node_modules/.pnpm
+      shards: 2
+      artifact-prefix: integration-pnpm
+
   configuration:
     name: Exercise Configuration (${{ matrix.entry.framework }}, ${{ matrix.entry.kernel }})
     strategy:
