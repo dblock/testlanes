@@ -46,6 +46,10 @@ No maintained npm library implements runtime-weighted multiway partitioning, so 
 
 Every job checks out the code without persisting credentials, detects npm, pnpm, or Yarn from the lockfile and `packageManager` field, sets up Node.js from `node-version` or the working directory's version file, and installs dependencies with `install-command` or the detected command. pnpm and Yarn are enabled through a pinned Corepack, and a second `actions/setup-node` call caches their stores once they are available. Third-party actions are pinned by commit.
 
+### Install and Test Node.js
+
+Without `install-node-version`, every job uses `node-version` or the working directory's version file. With it, every job installs dependencies, plans, and collects on `install-node-version`, and Test jobs then set up `node-version` without a package cache before `setup` and the shard run, so projects can install with a newer npm while testing older Node.js releases.
+
 ### Plans and Retries
 
 `plan.json` records the testlanes version, framework, pattern, test arguments, grouping, selected file sizes, and each shard's files. Its SHA256 is the plan fingerprint. Workers reject plans from another testlanes version, shards outside the plan, and file selections or sizes that changed after preparation. After a successful run, the files the reporter measured must equal the shard's assigned files.
