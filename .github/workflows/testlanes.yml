@@ -93,22 +93,27 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       artifact: ${{ steps.plan.outputs.artifact }}
       package-manager: ${{ steps.tools.outputs.package-manager }}
-      lockfile: ${{ steps.tools.outputs.lockfile }}
       install: ${{ steps.tools.outputs.install }}
-      node-version-file: ${{ steps.tools.outputs.node-version-file }}
     steps:
       - &checkout
         name: Check Out Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - &setup-node
+        name: Set Up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ inputs.install-node-version || inputs.node-version }}
+          # Chosen with expressions, so runners need no Node.js before this step.
+          node-version-file: ${{ inputs.install-node-version == '' && inputs.node-version == '' && (hashFiles(format('{0}/.nvmrc', inputs.working-directory)) != '' && format('{0}/.nvmrc', inputs.working-directory) || hashFiles(format('{0}/.node-version', inputs.working-directory)) != '' && format('{0}/.node-version', inputs.working-directory) || hashFiles(format('{0}/package.json', inputs.working-directory)) != '' && format('{0}/package.json', inputs.working-directory) || '') || '' }}
+          cache: ${{ hashFiles(format('{0}/package-lock.json', inputs.working-directory)) != '' && 'npm' || '' }}
+          cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
       - name: Detect Package Manager
         id: tools
-        # Runs once, before dependencies are installed, with the Node.js that GitHub-hosted runners provide.
+        # Runs once, before dependencies are installed, with the Node.js set up above.
         shell: node {0}
         working-directory: ${{ inputs.working-directory }}
-        env:
-          WORKING_DIRECTORY: ${{ inputs.working-directory }}
         run: |
           const fs = require("node:fs");
           const has = (file) => fs.existsSync(file);
@@ -122,25 +127,11 @@ jobs:
             pnpm: "pnpm install --frozen-lockfile",
             yarn: has(".yarnrc.yml") ? "yarn install --immutable" : "yarn install --frozen-lockfile",
           }[manager];
-          const versionFile = [".nvmrc", ".node-version", "package.json"].find(has);
-          const values = {
-            "package-manager": manager,
-            lockfile: { npm: "package-lock.json", pnpm: "pnpm-lock.yaml", yarn: "yarn.lock" }[manager],
-            install,
-            "node-version-file": versionFile ? `${process.env.WORKING_DIRECTORY}/${versionFile}` : "",
-          };
+          const values = { "package-manager": manager, install };
           const lines = (format) => Object.entries(values).map(([key, value]) => `${format(key)}=${value}\n`).join("");
           // Job outputs for the Test and Collect jobs, and environment variables for this job's later steps.
           fs.appendFileSync(process.env.GITHUB_OUTPUT, lines((key) => key));
           fs.appendFileSync(process.env.GITHUB_ENV, lines((key) => `TESTLANES_${key.toUpperCase().replaceAll("-", "_")}`));
-      - &setup-node
-        name: Set Up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ inputs.install-node-version || inputs.node-version }}
-          node-version-file: ${{ inputs.install-node-version == '' && inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
-          cache: ${{ env.TESTLANES_PACKAGE_MANAGER == 'npm' && 'npm' || '' }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ env.TESTLANES_LOCKFILE }}
       - &enable-corepack
         name: Enable Corepack
         if: env.TESTLANES_PACKAGE_MANAGER != 'npm'
@@ -189,9 +180,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       TESTLANES_PACKAGE_MANAGER: ${{ needs.prepare.outputs.package-manager }}
-      TESTLANES_LOCKFILE: ${{ needs.prepare.outputs.lockfile }}
       TESTLANES_INSTALL: ${{ needs.prepare.outputs.install }}
-      TESTLANES_NODE_VERSION_FILE: ${{ needs.prepare.outputs.node-version-file }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ inputs.max-parallel }}
@@ -213,7 +202,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
+          node-version-file: ${{ inputs.node-version == '' && (hashFiles(format('{0}/.nvmrc', inputs.working-directory)) != '' && format('{0}/.nvmrc', inputs.working-directory) || hashFiles(format('{0}/.node-version', inputs.working-directory)) != '' && format('{0}/.node-version', inputs.working-directory) || hashFiles(format('{0}/package.json', inputs.working-directory)) != '' && format('{0}/package.json', inputs.working-directory) || '') || '' }}
           package-manager-cache: false
       - name: Set Up Application
         if: inputs.setup != ''
@@ -252,9 +241,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
       TESTLANES_PACKAGE_MANAGER: ${{ needs.prepare.outputs.package-manager }}
-      TESTLANES_LOCKFILE: ${{ needs.prepare.outputs.lockfile }}
       TESTLANES_INSTALL: ${{ needs.prepare.outputs.install }}
-      TESTLANES_NODE_VERSION_FILE: ${{ needs.prepare.outputs.node-version-file }}
     steps:
       - *checkout
       - *setup-node

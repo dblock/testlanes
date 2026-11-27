@@ -77,22 +77,20 @@ test("the package manager detection step reads lockfiles, packageManager, and ve
     const environment = join(project, "environment");
     await writeFile(output, "");
     await writeFile(environment, "");
-    execFileSync(process.execPath, [join(scratch, "detect.cjs")], { cwd: project, env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_ENV: environment, WORKING_DIRECTORY: "app" } });
+    execFileSync(process.execPath, [join(scratch, "detect.cjs")], { cwd: project, env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_ENV: environment } });
     const outputs = parse(await readFile(output, "utf8"));
     const variables = parse(await readFile(environment, "utf8"));
     assert.deepEqual(variables, {
       TESTLANES_PACKAGE_MANAGER: outputs["package-manager"],
-      TESTLANES_LOCKFILE: outputs.lockfile,
       TESTLANES_INSTALL: outputs.install,
-      TESTLANES_NODE_VERSION_FILE: outputs["node-version-file"],
     });
     return outputs;
   };
-  assert.deepEqual(await detect({}), { "package-manager": "npm", lockfile: "package-lock.json", install: "npm ci", "node-version-file": "" });
-  assert.deepEqual(await detect({ "pnpm-lock.yaml": "", ".nvmrc": "26" }), { "package-manager": "pnpm", lockfile: "pnpm-lock.yaml", install: "pnpm install --frozen-lockfile", "node-version-file": "app/.nvmrc" });
-  assert.deepEqual(await detect({ "yarn.lock": "", ".yarnrc.yml": "" }), { "package-manager": "yarn", lockfile: "yarn.lock", install: "yarn install --immutable", "node-version-file": "" });
-  assert.deepEqual(await detect({ "yarn.lock": "", "package.json": '{"packageManager":"yarn@1.22.22"}' }), { "package-manager": "yarn", lockfile: "yarn.lock", install: "yarn install --frozen-lockfile", "node-version-file": "app/package.json" });
-  assert.deepEqual(await detect({ "package.json": '{"packageManager":"pnpm@10.0.0"}' }), { "package-manager": "pnpm", lockfile: "pnpm-lock.yaml", install: "pnpm install --frozen-lockfile", "node-version-file": "app/package.json" });
+  assert.deepEqual(await detect({}), { "package-manager": "npm", install: "npm ci" });
+  assert.deepEqual(await detect({ "pnpm-lock.yaml": "", ".nvmrc": "26" }), { "package-manager": "pnpm", install: "pnpm install --frozen-lockfile" });
+  assert.deepEqual(await detect({ "yarn.lock": "", ".yarnrc.yml": "" }), { "package-manager": "yarn", install: "yarn install --immutable" });
+  assert.deepEqual(await detect({ "yarn.lock": "", "package.json": '{"packageManager":"yarn@1.22.22"}' }), { "package-manager": "yarn", install: "yarn install --frozen-lockfile" });
+  assert.deepEqual(await detect({ "package.json": '{"packageManager":"pnpm@10.0.0"}' }), { "package-manager": "pnpm", install: "pnpm install --frozen-lockfile" });
   assert.equal((await detect({ "package.json": "{" }))["package-manager"], "npm");
 });
 
@@ -117,4 +115,13 @@ test("the reusable workflow installs with install-node-version and tests with no
   assert.ok(testNode > 0);
   assert.ok(testNode < workflow.indexOf("- name: Set Up Application\n"));
   assert.ok(testNode > workflow.indexOf("- name: Install Dependencies\n", workflow.indexOf("\n  test:\n")));
+});
+
+test("the reusable workflow sets up Node.js before running any JavaScript step", async () => {
+  const workflow = await read(".github/workflows/testlanes.yml");
+  const setupNode = workflow.indexOf("- &setup-node\n");
+  assert.ok(setupNode > 0);
+  assert.ok(setupNode < workflow.indexOf("shell: node {0}"), "Set Up Node runs before Detect Package Manager.");
+  assert.doesNotMatch(workflow, /TESTLANES_NODE_VERSION_FILE|TESTLANES_LOCKFILE/u);
+  assert.match(workflow, /node-version-file: \$\{\{ inputs\.install-node-version == '' && inputs\.node-version == '' && \(hashFiles\(/u);
 });
