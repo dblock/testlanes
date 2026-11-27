@@ -39,6 +39,37 @@ jobs:
 
 Vitest and Jest test files come from the runner's own listing (`vitest list` or `jest --listTests`), so your configuration's include and exclude settings apply. node:test cannot list files, so testlanes matches the default `node --test` patterns, such as `**/*.test.js` and `**/test/**/*.js`, outside `node_modules`; set `pattern` to select others, for example `test/**/*.test.js`. The first run groups files by size. Each successful push to the default branch records per-file timings, and later runs, including PRs, balance shards by those timings without updating them.
 
+### Coverage
+
+Wrap each shard's tests with a coverage tool and upload its report, then send every shard's report to your coverage service from a job of your own. With [c8](https://github.com/bcoe/c8) and [Coveralls](https://coveralls.io), which merges the reports:
+
+```yaml
+jobs:
+  test:
+    name: Test
+    uses: dblock/testlanes/.github/workflows/testlanes.yml@v0.1.0
+    with:
+      framework: node
+      test-wrapper: '["c8","--reporter=lcov"]'
+      artifacts: coverage/lcov.info
+
+  coverage:
+    name: Coverage
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: testlanes-artifacts-*
+          path: shards
+      - id: reports
+        run: echo "files=$(find shards -name lcov.info | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+      - uses: coverallsapp/github-action@v2.3.8
+        with:
+          files: ${{ steps.reports.outputs.files }}
+```
+
 ### Standalone Shard Matrix Action
 
 If you manage your own jobs, the standalone action only assigns files to shards. Set up Node.js and install dependencies first; your workflow runs the tests and manages timing history.
@@ -85,6 +116,8 @@ The `testlanes.yml` workflow accepts these inputs.
 | `group-by` | `auto` | `auto` uses timings when at least half the files have them, otherwise file sizes; `filesize` or `runtime` force one mode. |
 | `pattern` | | Glob selecting test files relative to the working directory, instead of the runner's listing or the default node:test patterns. |
 | `test-args` | `[]` | JSON array of extra runner arguments, used when listing and running tests, such as `'["--project","unit"]'` for Vitest or `'["--test-concurrency=2"]'` for node:test. |
+| `test-wrapper` | `[]` | JSON array of a command and arguments that wrap each shard's test run, such as `'["c8","--reporter=lcov"]'` for coverage; an installed package's executable runs with Node.js. |
+| `artifacts` | | Paths relative to the repository root uploaded from every shard, even when tests fail, as `<artifact-prefix>-artifacts-<shard>`. |
 | `working-directory` | `.` | Directory containing the project's `package.json`. |
 | `node-version` | | Node.js version; empty reads `.nvmrc`, `.node-version`, or `package.json` in the working directory. |
 | `install-command` | | Dependency installation command; empty runs `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install` with a frozen lockfile, detected from the lockfile and `packageManager`; run with Bash, or PowerShell on Windows. |

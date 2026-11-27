@@ -61,6 +61,10 @@ Every job checks out the code without persisting credentials, detects npm, pnpm,
 
 Artifacts are named `<prefix>-plan-<attempt>`, `<prefix>-shard-<shard>-<attempt>`, and `<prefix>-timings`. Prefixes contain only letters, numbers, underscores, and hyphens.
 
+### Wrappers and Artifacts
+
+`test-wrapper` is stored in the plan, like `test-args`, and prefixes only shard runs, not file listing. When its command names an executable declared by an installed package, such as `c8`, testlanes runs that file with Node.js, which also avoids `.cmd` shims on Windows; other commands run as given. `artifacts` uploads paths from every shard with `if: always()` as `<prefix>-artifacts-<shard>`, overwriting earlier attempts, so a download after retries holds exactly one current set per shard. testlanes does not merge or interpret them; callers send them to coverage or reporting services.
+
 ### Workflow Steps
 
 Every step in `testlanes.yml` runs the same way on Linux, macOS, and Windows. The testlanes steps are one-line `npx --no-install testlanes github history|prepare|run|collect` commands that read the workflow's `toJSON(inputs)` from `TESTLANES_INPUTS` and the shard from `TESTLANES_SHARD`, keep files under `RUNNER_TEMP/testlanes`, validate the artifact prefix, and write step outputs, including artifact names, to `GITHUB_OUTPUT`. Keeping the logic in the CLI avoids duplicating shell code per OS and passing JSON or empty arguments through `npx`, which is a batch shim on Windows. Script files in this repository are not available in a caller's job, so the logic lives in the caller's installed package, as parallel_tests-ci does with `PTCI_INPUTS`.

@@ -41,6 +41,21 @@ jobs:
       shards: 2
       test-args: '["--test-concurrency=1"]'
       artifact-prefix: integration-node
+      test-wrapper: '["c8","--reporter=lcov"]'
+      artifacts: fixtures/node/coverage/lcov.info
+
+  node-artifacts:
+    name: Check node:test Shard Artifacts
+    needs: node
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Shard Artifacts
+        uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: integration-node-artifacts-*
+          path: artifacts
+      - name: Check One Coverage Report per Shard
+        run: test "$(find artifacts -name lcov.info | wc -l)" -eq 2
 
   configuration:
     name: Exercise Configuration (${{ matrix.entry.framework }}, ${{ matrix.entry.kernel }})

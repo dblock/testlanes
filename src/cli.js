@@ -6,7 +6,7 @@ import { collect } from "./collect.js";
 import { discover } from "./discover.js";
 import { artifactPrefix, findHistory, requiredEnv, writeOutputs } from "./github.js";
 import { version } from "./index.js";
-import { createPlan, fileMatrix, formatPlan, positiveInteger, testArguments, workerMatrix } from "./plan.js";
+import { createPlan, fileMatrix, formatPlan, positiveInteger, testArguments, testWrapper, workerMatrix } from "./plan.js";
 import { runShard } from "./run.js";
 import { readTimings } from "./timings.js";
 
@@ -32,6 +32,7 @@ const commands = {
       pattern: { type: "string", default: "" },
       timings: { type: "string", default: "" },
       "test-args": { type: "string", default: "[]" },
+      "test-wrapper": { type: "string", default: "[]" },
       out: { type: "string", default: "" },
       matrix: { type: "string", default: "files" },
       "expect-version": { type: "string", default: "" },
@@ -44,6 +45,7 @@ Options:
   --pattern <glob>         Select files with a glob instead of the framework's listing or default patterns.
   --timings <file>         Timing history JSON; a missing file supplies no history.
   --test-args <json>       JSON array of extra framework arguments (default []).
+  --test-wrapper <json>    JSON array of a command and arguments that wrap test runs, such as c8 (default []).
   --out <directory>        Write plan.json to this directory.
   --matrix <files|workers> Matrix entries with assigned files or display names (default files).
   --expect-version <v>     Fail unless the installed testlanes version matches.
@@ -161,6 +163,12 @@ async function plan(values, { cwd, stdout, stderr, env }) {
   } catch {
     throw new Error("Test arguments must be a JSON array of strings.");
   }
+  let wrapper;
+  try {
+    wrapper = testWrapper(JSON.parse(values["test-wrapper"]));
+  } catch {
+    throw new Error("The test wrapper must be a JSON array of strings starting with a command.");
+  }
   const framework = requireOption(values, "framework");
   const pattern = values.pattern || null;
   let timings = {};
@@ -172,7 +180,7 @@ async function plan(values, { cwd, stdout, stderr, env }) {
     }
   }
   const files = await discover({ framework, cwd, pattern, testArgs });
-  const prepared = createPlan({ version, framework, files, shards: values.shards, groupBy: values["group-by"], timings, pattern, testArgs });
+  const prepared = createPlan({ version, framework, files, shards: values.shards, groupBy: values["group-by"], timings, pattern, testArgs, testWrapper: wrapper });
   if (values.out) {
     await mkdir(values.out, { recursive: true });
     await writeFile(join(values.out, "plan.json"), formatPlan(prepared));
@@ -246,6 +254,7 @@ async function github(args, io) {
         pattern: input("pattern", ""),
         timings: join(base, "history", "timings.json"),
         "test-args": input("test-args", "[]"),
+        "test-wrapper": input("test-wrapper", "[]"),
         out: join(base, "plan"),
         matrix: "workers",
         "expect-version": "",

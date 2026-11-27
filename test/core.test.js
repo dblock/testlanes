@@ -3,10 +3,10 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
-import { frameworks, framework, nodeTestPatterns, packageBin } from "../src/frameworks.js";
+import { frameworks, framework, nodeTestPatterns, packageBin, wrapperCommand } from "../src/frameworks.js";
 import { partition } from "../src/partition.js";
 import { relativePath, validatePath } from "../src/paths.js";
-import { createPlan, fileMatrix, fingerprint, formatPlan, grouping, parsePlan, positiveInteger, testArguments, workerMatrix } from "../src/plan.js";
+import { createPlan, fileMatrix, fingerprint, formatPlan, grouping, parsePlan, positiveInteger, testArguments, testWrapper, workerMatrix } from "../src/plan.js";
 import { formatTimings, parseTimings, readTimings } from "../src/timings.js";
 
 describe("paths", () => {
@@ -72,6 +72,11 @@ describe("plan", () => {
     assert.deepEqual(testArguments(["--ci"]), ["--ci"]);
     assert.throws(() => testArguments([1]), /JSON array of strings/u);
     assert.throws(() => testArguments("--ci"), /JSON array of strings/u);
+    assert.deepEqual(testWrapper(["c8", "--all"]), ["c8", "--all"]);
+    assert.deepEqual(testWrapper([]), []);
+    for (const value of [[1], [""], "c8", null]) {
+      assert.throws(() => testWrapper(value), /The test wrapper must be a JSON array of strings starting with a command\./u);
+    }
   });
 
   test("chooses grouping from timing coverage", () => {
@@ -117,7 +122,10 @@ describe("plan", () => {
   });
 
   test("round-trips, fingerprints, and validates serialized plans", () => {
-    const plan = createPlan({ version: "1.0.0", framework: "vitest", files, shards: 2, testArgs: ["--ci"] });
+    assert.deepEqual(createPlan({ version: "1.0.0", framework: "vitest", files }).testWrapper, []);
+    const plan = createPlan({ version: "1.0.0", framework: "vitest", files, shards: 2, testArgs: ["--ci"], testWrapper: ["c8"] });
+    assert.deepEqual(plan.testWrapper, ["c8"]);
+    assert.throws(() => parsePlan(JSON.stringify({ ...plan, testWrapper: "c8" })), /The test wrapper must be a JSON array/u);
     const text = formatPlan(plan);
     assert.deepEqual(parsePlan(text), plan);
     assert.match(fingerprint(text), /^[0-9a-f]{64}$/u);
@@ -160,6 +168,15 @@ describe("frameworks", () => {
     assert.throws(() => frameworks.vitest.parseList('[{"name":"x"}]'), /vitest list returned an unexpected entry\./u);
     assert.throws(() => frameworks.vitest.parseList("[null]"), /vitest list returned an unexpected entry\./u);
     assert.throws(() => frameworks.jest.parseList("[1]"), /jest --listTests returned an unexpected entry\./u);
+  });
+
+  test("resolves wrapper commands to installed executables or runs them as given", () => {
+    assert.deepEqual(wrapperCommand([], import.meta.dirname), []);
+    const [node, c8, ...rest] = wrapperCommand(["c8", "--all"], import.meta.dirname);
+    assert.equal(node, process.execPath);
+    assert.match(c8, /c8[\\/]bin[\\/]c8\.js$/u);
+    assert.deepEqual(rest, ["--all"]);
+    assert.deepEqual(wrapperCommand(["not-an-installed-package", "-x"], import.meta.dirname), ["not-an-installed-package", "-x"]);
   });
 
   test("finds installed executables and reports missing ones", async () => {

@@ -55,6 +55,14 @@ on:
         description: JSON array of additional framework arguments used for listing and running tests.
         type: string
         default: '[]'
+      test-wrapper:
+        description: JSON array of a command and arguments that wrap each shard's test run, such as c8 for coverage.
+        type: string
+        default: '[]'
+      artifacts:
+        description: Paths relative to the repository root uploaded from every shard as <artifact-prefix>-artifacts-<shard>, such as coverage reports.
+        type: string
+        default: ''
       artifact-prefix:
         description: Unique artifact name prefix when calling this workflow more than once.
         type: string
@@ -224,6 +232,16 @@ jobs:
           name: ${{ steps.run.outputs.artifact }}
           path: ${{ runner.temp }}/testlanes/result/
           if-no-files-found: error
+          retention-days: ${{ inputs.artifact-retention-days }}
+      - name: Upload Test Artifacts
+        if: always() && inputs.artifacts != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-prefix }}-artifacts-${{ matrix.entry.shard }}
+          path: ${{ inputs.artifacts }}
+          include-hidden-files: true
+          if-no-files-found: ignore
+          overwrite: true
           retention-days: ${{ inputs.artifact-retention-days }}
 
   collect:

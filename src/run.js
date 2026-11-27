@@ -41,6 +41,7 @@ export async function runShard({ plan: directory, shard, attempt, out, cwd, vers
   const { code } = await execute(selected, selected.runArgs(assigned.map((file) => resolve(cwd, file)), plan.testArgs), {
     cwd,
     env: { ...process.env, TESTLANES_TIMINGS: measurements },
+    wrapper: plan.testWrapper,
   });
   if (code !== 0) return code;
   let recorded;

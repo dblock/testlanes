@@ -18,6 +18,7 @@ Source lives in `src/` as ESM JavaScript with JSDoc types; `types/` is generated
 - Pass Vitest files as absolute paths before any options, never after `--`, and verify that a shard measured exactly its assigned files.
 - Workflows run the caller's installed CLI with `npx --no-install`; keep third-party actions pinned by commit and pass inputs to the CLI through `TESTLANES_INPUTS` and other environment variables, never by interpolating them into commands, except the caller-supplied `install-command` and `setup` scripts.
 - Keep `TESTLANES_VERSION` in `action.yml` equal to the package version, and the README install, workflow, and action pins on the latest released version; `npr.config.js` updates both during releases. The reusable workflow carries no version, and release references must never name files under `.github/workflows/`, which the release workflow's `GITHUB_TOKEN` cannot push. Keep one reusable workflow selected by its `framework` input rather than per-framework wrappers.
+- Apply `test-wrapper` only to shard runs, never to file listing, and keep `artifacts` uploads `if: always()` with one overwritten artifact per shard.
 - Keep `testlanes.yml` steps single and OS-independent: logic belongs in `testlanes github <step>`, which reads `TESTLANES_INPUTS`, not in Bash or PowerShell. The pre-install Detect Package Manager step is JavaScript run with `shell: node {0}`. `install-command` and `setup` are the caller's own scripts, run as the step body with the runner's default shell.
 - Error and help messages are full sentences ending with periods.
 
