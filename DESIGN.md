@@ -18,8 +18,8 @@ The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types duri
 | `testlanes plan` | Selects files, chooses a grouping, partitions them, writes `plan.json`, and outputs a matrix. |
 | `testlanes run` | Verifies the plan and runs one shard, writing `timings.json` and a `result.json` marker only on success. |
 | `testlanes collect` | Validates every shard's newest report and merges their timings into a baseline. |
-| `testlanes.yml` | Reusable workflow running Prepare, Test, and Collect jobs for the framework selected by its required `framework` input. |
-| `testlanes github` | Runs the reusable workflow's history, prepare, run, and collect steps and the action's matrix step from `TESTLANES_INPUTS`. |
+| `testlanes.yml` | Reusable workflow running Shard Matrix, Test, Verify Shards, and Collect jobs for the framework selected by its required `framework` input. |
+| `testlanes github` | Runs the reusable workflow's run and collect steps and the action's matrix step from `TESTLANES_INPUTS`. |
 | `action.yml` | Standalone composite action that runs `testlanes github matrix` and outputs a file matrix. |
 
 Reporters record nothing unless `TESTLANES_TIMINGS` names an output file, which `testlanes run` sets for the runner process. The CLI is installed from the caller's `testlanes` development dependency and run with `npx --no-install`, so workflows never download packages at run time. The reusable workflow and the action carry no version: callers pin their tag and install the matching `testlanes`, and they run the installed version, so keeping the two matched is the caller's responsibility. Releases never edit `.github/workflows/`, which the release workflow's `GITHUB_TOKEN` cannot push, or `action.yml`.
@@ -40,30 +40,33 @@ No maintained npm library implements runtime-weighted multiway partitioning, so 
 
 | Job | Behavior |
 | --- | --- |
-| Prepare | Find a timing baseline, write the immutable plan, and emit the `matrix.entry` list of shard numbers and names. |
-| Test | Run each planned shard and upload its measurements only if it passes. |
+| Shard Matrix | List the requested shard numbers and names as `matrix.entry` and find the trusted timing baseline with `actions/github-script`, without checking out code or setting up Node.js. |
+| Test | Download the baseline, plan all shards, run this one, and upload its measurements and plan only if it passes. |
+| Verify Shards | After every shard passes, check that their results share one plan fingerprint and cover every planned shard. |
 | Collect | On default-branch pushes only, validate and combine all shards' timings and publish a baseline; other runs skip this job. |
 
-Every job checks out the code without persisting credentials, detects npm, pnpm, or Yarn from the lockfile and `packageManager` field, sets up Node.js from `node-version` or the working directory's version file, and installs dependencies with `install-command` or the detected command. pnpm and Yarn are enabled through a pinned Corepack; only the npm download cache is restored, because `actions/setup-node` cannot locate their stores before Corepack installs them. Third-party actions are pinned by commit.
+The Test and Collect jobs check out the code without persisting credentials, detects npm, pnpm, or Yarn from the lockfile and `packageManager` field, sets up Node.js from `node-version` or the working directory's version file, and installs dependencies with `install-command` or the detected command. pnpm and Yarn are enabled through a pinned Corepack; only the npm download cache is restored, because `actions/setup-node` cannot locate their stores before Corepack installs them. Third-party actions are pinned by commit.
 
 ### Install and Test Node.js
 
-Without `install-node-version`, every job uses `node-version` or the working directory's version file. With it, every job installs dependencies, plans, and collects on `install-node-version`, and Test jobs then set up `node-version` without a package cache before `setup` and the shard run, so projects can install with a newer npm while testing older Node.js releases.
+Without `install-node-version`, every job uses `node-version` or the working directory's version file. With it, Test and Collect jobs install dependencies, plan, and collect on `install-node-version`, and Test jobs then set up `node-version` without a package cache before `setup` and the shard run, so projects can install with a newer npm while testing older Node.js releases.
 
 ### Plans and Retries
 
-`plan.json` records the testlanes version, framework, pattern, test arguments, grouping, selected file sizes, and each shard's files. Its SHA256 is the plan fingerprint. Workers reject plans from another testlanes version, shards outside the plan, and file selections or sizes that changed after preparation. After a successful run, the files the reporter measured must equal the shard's assigned files.
+`plan.json` records the testlanes version, framework, pattern, test arguments, grouping, selected file sizes, and each shard's files. Its SHA256 is the plan fingerprint. There is no planning job: every Test job plans for itself from the same checkout, file sizes, inputs, and baseline, which the Shard Matrix job finds once per run, so lookups cost a few API calls per run rather than per shard, and the planner is deterministic, so all shards compute the same plan, which saves a job's checkout and install on every run. A shard numbered beyond the plan's shards, when there are more requested shards than files, passes without running tests or uploading results. Each shard uploads its `plan.json` beside `result.json`, which records the fingerprint, shard, shard count, and attempt; Verify Shards fails when shards planned differently or a planned shard has no result, and Collect takes the plan from a result whose fingerprint matches. Workers reject plans from another testlanes version, shards outside the plan, and file selections or sizes that changed after preparation. After a successful run, the files the reporter measured must equal the shard's assigned files.
 
 | Case | Rule |
 | --- | --- |
 | Failed shard | The runner's exit code is returned; no timings or success marker are written or uploaded. |
-| Failed-job retry | Reuse the prepared plan; collection selects the newest attempt for each shard. |
+| Failed-job retry | The retried shard reuses the Shard Matrix job's baseline and plans again; collection selects the newest attempt for each shard. |
+| Full re-run | All jobs plan again, possibly from a newer baseline; Verify Shards and Collect use each shard's newest attempt. |
+| Differing plans | Verify Shards fails when the newest attempts planned differently, for example when the baseline expired or failed to download for a retried shard; re-run all jobs. |
 | Duplicate latest attempt | Collection fails rather than choosing arbitrarily. |
 | Other plans | Reports with another fingerprint are ignored. |
 | Unassigned timing | Collection fails when a shard reports a file assigned elsewhere. |
 | Missing timings | Allowed per shard, but collection requires at least one timing overall. |
 
-Artifacts are named `<prefix>-plan-<attempt>`, `<prefix>-shard-<shard>-<attempt>`, and `<prefix>-timings`. Prefixes contain only letters, numbers, underscores, and hyphens.
+Artifacts are named `<prefix>-shard-<shard>-<attempt>` and `<prefix>-timings`. Prefixes contain only letters, numbers, underscores, and hyphens.
 
 ### Wrappers and Artifacts
 
@@ -71,13 +74,13 @@ Artifacts are named `<prefix>-plan-<attempt>`, `<prefix>-shard-<shard>-<attempt>
 
 ### Workflow Steps
 
-Every step in `testlanes.yml` runs the same way on Linux, macOS, and Windows. testlanes' own steps use [`actions/github-script`](https://github.com/actions/github-script), which runs JavaScript on the Node.js bundled with the Actions runner, so they need no shell and no Node.js on the runner. The testlanes steps run `npx --no-install testlanes github history|prepare|run|collect` with `exec.exec`, and the action's runs `testlanes github matrix`; they read the `toJSON(inputs)` from `TESTLANES_INPUTS` and the shard from `TESTLANES_SHARD`, keep files under `RUNNER_TEMP/testlanes`, validate the artifact prefix, and write step outputs, including artifact names, to `GITHUB_OUTPUT`. Keeping the logic in the CLI avoids duplicating shell code per OS and passing JSON or empty arguments through `npx`, which is a batch shim on Windows. Script files in this repository are not available in a caller's job, so the logic lives in the caller's installed package, as parallel_tests-ci does with `PTCI_INPUTS`.
+Every step in `testlanes.yml` runs the same way on Linux, macOS, and Windows. testlanes' own steps use [`actions/github-script`](https://github.com/actions/github-script), which runs JavaScript on the Node.js bundled with the Actions runner, so they need no shell and no Node.js on the runner. The testlanes steps run `npx --no-install testlanes github run|collect` with `exec.exec`, and the action's runs `testlanes github matrix`; they read the `toJSON(inputs)` from `TESTLANES_INPUTS` and the shard from `TESTLANES_SHARD`, keep files under `RUNNER_TEMP/testlanes`, validate the artifact prefix, and write step outputs, including artifact names, to `GITHUB_OUTPUT`. Keeping the logic in the CLI avoids duplicating shell code per OS and passing JSON or empty arguments through `npx`, which is a batch shim on Windows. Script files in this repository are not available in a caller's job, so the logic lives in the caller's installed package, as parallel_tests-ci does with `PTCI_INPUTS`.
 
-Package manager detection runs first, before Node.js is set up, as a short `actions/github-script` step that also chooses the version file (`.nvmrc`, `.node-version`, or `package.json`) and lockfile for Set Up Node. Corepack is enabled and the detected install command runs with `exec.exec`. Detection runs once, in Prepare, and passes its results to the Test and Collect jobs as job outputs; every job reads them as `TESTLANES_*` environment variables, so the checkout, Node.js, Corepack, and install steps are defined once with YAML anchors and reused with aliases. `install-command` and `setup` are the caller's own scripts and run as the step body with the runner's default shell, Bash on Linux and macOS and PowerShell on Windows; they are the only steps that need a shell. The CLI resolves its working directory with `realpathSync.native`, because Windows temporary paths may use short names while test runners report long ones; it passes the node:test reporter as a file URL and Vitest forward-slash absolute paths.
+Package manager detection runs first, before Node.js is set up, as a short `actions/github-script` step that also chooses the version file (`.nvmrc`, `.node-version`, or `package.json`) and lockfile for Set Up Node. Corepack is enabled and the detected install command runs with `exec.exec`. Detection runs in each Test and Collect job and exports its results as `TESTLANES_*` environment variables, so the checkout, detection, Node.js, Corepack, and install steps are defined once in the Test job with YAML anchors and reused in Collect with aliases. `install-command` and `setup` are the caller's own scripts and run as the step body with the runner's default shell, Bash on Linux and macOS and PowerShell on Windows; they are the only steps that need a shell. The CLI resolves its working directory with `realpathSync.native`, because Windows temporary paths may use short names while test runners report long ones; it passes the node:test reporter as a file URL and Vitest forward-slash absolute paths.
 
 ## Trust
 
-PRs, including forks, read history but never supply baselines. `testlanes github history` looks through the current workflow's latest 20 successful default-branch push runs, keeps only same-repository push runs, and picks the newest unexpired `<prefix>-timings` artifact; lookup failures are warnings, not errors. Only Collect jobs of default-branch pushes publish baselines. Workflows use `contents: read` and `actions: read`, never execute artifacts, and never use `pull_request_target`. Unusable history is ignored with a warning.
+PRs, including forks, read history but never supply baselines. The Shard Matrix job's Find Trusted History step looks through the current workflow's latest 20 successful default-branch push runs with `github.rest`, keeps only same-repository push runs, and picks the newest unexpired `<prefix>-timings` artifact; lookup failures are warnings, not errors. Only Collect jobs of default-branch pushes publish baselines. Workflows use `contents: read` and `actions: read`, never execute artifacts, and never use `pull_request_target`. Unusable history is ignored with a warning.
 
 ## Artwork
 

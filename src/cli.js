@@ -1,12 +1,12 @@
 import { existsSync, realpathSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { collect } from "./collect.js";
 import { discover } from "./discover.js";
-import { artifactPrefix, findHistory, requiredEnv, writeOutputs } from "./github.js";
+import { artifactPrefix, requiredEnv, writeOutputs } from "./github.js";
 import { version } from "./index.js";
-import { createPlan, fileMatrix, formatPlan, positiveInteger, testArguments, testWrapper, workerMatrix } from "./plan.js";
+import { createPlan, fileMatrix, fingerprint, formatPlan, positiveInteger, testArguments, testWrapper, workerMatrix } from "./plan.js";
 import { runShard } from "./run.js";
 import { readTimings } from "./timings.js";
 
@@ -14,7 +14,7 @@ const usage = `Usage: testlanes <command> [options]
 
 Commands:
   plan      Select test files and assign them to shards.
-  run       Run one shard of a prepared plan and record its timings.
+  run       Plan the shards and run one of them, recording its timings.
   collect   Validate shard results and merge their timings into a baseline.
   github    Run one step of the testlanes reusable workflow or standalone action.
 
@@ -69,10 +69,10 @@ Options:
   },
   github: {
     options: {},
-    help: `Usage: testlanes github <history|prepare|run|collect|matrix>
+    help: `Usage: testlanes github <run|collect|matrix>
 
 Runs one step of the testlanes reusable workflow, or the standalone action's
-matrix step. Reads the inputs from TESTLANES_INPUTS (toJSON(inputs)), the shard
+matrix step. The run step plans the shards and runs one of them. Reads the inputs from TESTLANES_INPUTS (toJSON(inputs)), the shard
 from TESTLANES_SHARD, keeps workflow files under RUNNER_TEMP/testlanes, and
 writes step outputs to GITHUB_OUTPUT.
 `,
@@ -190,8 +190,8 @@ async function github(args, io) {
   const { env, cwd, stderr } = io;
   const [step, ...extra] = args;
   if (extra.length > 0) throw new Error(`Unexpected arguments: ${extra.join(" ")}.`);
-  if (!["history", "prepare", "run", "collect", "matrix"].includes(step)) {
-    throw new Error(`Unknown github step ${JSON.stringify(step)}; expected history, prepare, run, collect, or matrix.`);
+  if (!["run", "collect", "matrix"].includes(step)) {
+    throw new Error(`Unknown github step ${JSON.stringify(step)}; expected run, collect, or matrix.`);
   }
   let inputs;
   try {
@@ -221,19 +221,21 @@ async function github(args, io) {
   const base = join(requiredEnv(env, "RUNNER_TEMP"), "testlanes");
   const attempt = env.GITHUB_RUN_ATTEMPT || "1";
   switch (step) {
-    case "history":
-      return await history(prefix, io);
-    case "prepare":
-      await plan(planValues(join(base, "history", "timings.json"), join(base, "plan")), "workers", io);
-      await writeOutputs({ artifact: `${prefix}-plan-${attempt}` }, env);
-      return 0;
     case "run": {
       const shard = positiveInteger(requiredEnv(env, "TESTLANES_SHARD"), "shard");
+      // Every shard plans for itself from the same files and baseline, so plans match.
+      await plan(planValues(join(base, "history", "timings.json"), join(base, "plan")), "workers", { ...io, env: { ...env, GITHUB_OUTPUT: "" }, stdout: stderr });
+      const prepared = JSON.parse(await readFile(join(base, "plan", "plan.json"), "utf8"));
+      if (shard > prepared.groups.length) {
+        stderr.write(`Shard ${shard} has no files; the plan has ${prepared.groups.length} shards.\n`);
+        return 0;
+      }
       const code = await runShard({ plan: join(base, "plan"), shard, attempt, out: join(base, "result"), cwd, version });
       if (code === 0) await writeOutputs({ artifact: `${prefix}-shard-${shard}-${attempt}` }, env);
       return code;
     }
     default: {
+      await sharedPlan(join(base, "results"), join(base, "plan"));
       const combined = await collect({ plan: join(base, "plan"), results: join(base, "results"), out: join(base, "baseline", "timings.json") });
       stderr.write(`Collected timings for ${Object.keys(combined).length} files.\n`);
       return 0;
@@ -242,27 +244,36 @@ async function github(args, io) {
 }
 
 /**
- * Writes the newest trusted timing baseline to `GITHUB_OUTPUT`; lookup failures are warnings.
+ * Copies the plan that shard results were produced from into a directory,
+ * choosing a \`plan.json\` whose fingerprint matches its \`result.json\`.
  *
- * @param {string} prefix
- * @param {{ stderr: NodeJS.WritableStream, env: NodeJS.ProcessEnv }} io
- * @returns {Promise<number>}
+ * @param {string} results
+ * @param {string} directory
+ * @returns {Promise<void>}
  */
-async function history(prefix, { stderr, env }) {
-  let found;
-  try {
-    found = await findHistory({ prefix, env });
-  } catch (error) {
-    stderr.write(`Timing history unavailable: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 0;
+async function sharedPlan(results, directory) {
+  const entries = (existsSync(results) ? await readdir(results, { recursive: true }) : []).filter((entry) => basename(entry) === "result.json");
+  /** @type {{ attempt: number, text: string }[]} */
+  const candidates = [];
+  for (const entry of entries) {
+    const folder = dirname(join(results, entry));
+    let text;
+    try {
+      text = await readFile(join(folder, "plan.json"), "utf8");
+    } catch {
+      continue;
+    }
+    const report = JSON.parse(await readFile(join(folder, "result.json"), "utf8"));
+    if (report.plan === fingerprint(text)) candidates.push({ attempt: Number(report.attempt), text });
   }
-  if (!found) {
-    stderr.write("No trusted timing history was found.\n");
-    return 0;
+  // A re-run of all jobs may plan differently; the newest attempt's plan is the current one.
+  const newest = candidates.sort((a, b) => b.attempt - a.attempt)[0];
+  if (newest) {
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "plan.json"), newest.text);
+    return;
   }
-  await writeOutputs({ "history-run": found.run, "history-artifact": found.artifact }, env);
-  stderr.write(`Found timing history in run ${found.run}.\n`);
-  return 0;
+  throw new Error("No shard result includes the plan it was produced from.");
 }
 
 /**
