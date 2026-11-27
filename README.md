@@ -87,9 +87,9 @@ The `testlanes.yml` workflow accepts these inputs.
 | `test-args` | `[]` | JSON array of extra runner arguments, used when listing and running tests, such as `'["--project","unit"]'` for Vitest or `'["--test-concurrency=2"]'` for node:test. |
 | `working-directory` | `.` | Directory containing the project's `package.json`. |
 | `node-version` | | Node.js version; empty reads `.nvmrc`, `.node-version`, or `package.json` in the working directory. |
-| `install-command` | | Dependency installation command; empty runs `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install` with a frozen lockfile, detected from the lockfile and `packageManager`. |
-| `setup` | | Shell commands run in each shard after installing dependencies, such as starting services. |
-| `runs-on` | `ubuntu-latest` | Runner label or JSON array of labels for every job; Linux and macOS are supported. |
+| `install-command` | | Dependency installation command; empty runs `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install` with a frozen lockfile, detected from the lockfile and `packageManager`; run with Bash, or PowerShell on Windows. |
+| `setup` | | Shell commands run in each shard after installing dependencies, such as starting services; Bash on Linux and macOS, PowerShell on Windows. |
+| `runs-on` | `ubuntu-latest` | Runner label or JSON array of labels for every job; Linux, macOS, and Windows are supported. |
 | `timeout-minutes` | `360` | Timeout for each job. |
 | `max-parallel` | `256` | Maximum concurrent shards. |
 | `fail-fast` | `false` | Cancel other shards when one fails. |

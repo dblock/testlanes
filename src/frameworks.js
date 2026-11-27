@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * @typedef {object} Framework
@@ -38,8 +38,9 @@ export const frameworks = {
       if (typeof file !== "string") throw new Error("vitest list returned an unexpected entry.");
       return file;
     }),
-    // Vitest ignores file filters after `--`, so files come first, before any options.
-    runArgs: (files, testArgs) => ["run", ...files, "--reporter=default", `--reporter=${join(reporters, "vitest.js")}`, ...testArgs],
+    // Vitest ignores file filters after `--`, so files come first, before any options. It compares
+    // filters with forward-slash paths, so Windows paths use forward slashes too.
+    runArgs: (files, testArgs) => ["run", ...files.map((file) => file.split(sep).join("/")), "--reporter=default", `--reporter=${join(reporters, "vitest.js")}`, ...testArgs],
     command: (cwd) => [process.execPath, packageBin("vitest", cwd)],
   },
   jest: {
@@ -65,7 +66,8 @@ export const frameworks = {
       "--test",
       "--test-reporter=spec",
       "--test-reporter-destination=stdout",
-      `--test-reporter=${join(reporters, "node.js")}`,
+      // A file URL, because node --test reads a Windows absolute path as a URL with a drive-letter scheme.
+      `--test-reporter=${pathToFileURL(join(reporters, "node.js")).href}`,
       "--test-reporter-destination=stderr",
       ...testArgs,
       ...files,

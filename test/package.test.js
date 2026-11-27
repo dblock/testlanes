@@ -2,16 +2,27 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { after, before, test } from "node:test";
 
 const root = resolve(import.meta.dirname, "..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 let workspace;
 let archive;
 
 function run(command, args, cwd) {
   return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+}
+
+/**
+ * Runs npm. Windows cannot spawn the npm.cmd shim without a shell, so it runs npm's CLI script with Node.js.
+ *
+ * @param {string[]} args
+ * @param {string} cwd
+ */
+function npm(args, cwd) {
+  if (process.platform !== "win32") return run("npm", args, cwd);
+  const cli = process.env.npm_execpath ?? join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+  return run(process.execPath, [cli, ...args], cwd);
 }
 
 before(async () => {
@@ -25,7 +36,7 @@ before(async () => {
     // whose shape differs between npm 11 and npm 12 (the release workflow's npm).
     const destination = join(workspace, "pack");
     await mkdir(destination);
-    run(npm, ["pack", "--pack-destination", destination], root);
+    npm(["pack", "--pack-destination", destination], root);
     const archives = (await readdir(destination)).filter((name) => name.endsWith(".tgz"));
     assert.equal(archives.length, 1, `npm pack must produce one archive, found: ${archives.join(", ")}`);
     archive = join(destination, archives[0]);
@@ -37,7 +48,7 @@ after(async () => {
 });
 
 test("archive contains only the published files", () => {
-  const files = run("tar", ["-tzf", archive], root).trim().split("\n").sort();
+  const files = run("tar", ["-tzf", archive], root).trim().split(/\r?\n/u).sort();
   assert.deepEqual(files, [
     "package/CHANGELOG.md",
     "package/DESIGN.md",
@@ -83,9 +94,9 @@ test("installed archive exposes the CLI, entry points, and types", async () => {
   const consumer = join(workspace, "consumer");
   await mkdir(consumer);
   await writeFile(join(consumer, "package.json"), JSON.stringify({ name: "consumer", private: true, type: "module" }));
-  run(npm, ["install", "--no-audit", "--no-fund", archive], consumer);
+  npm(["install", "--no-audit", "--no-fund", archive], consumer);
   const manifest = JSON.parse(await readFile(join(consumer, "node_modules", "testlanes", "package.json"), "utf8"));
-  assert.equal(run(npm, ["exec", "--no", "--", "testlanes", "--version"], consumer).trim(), manifest.version);
+  assert.equal(npm(["exec", "--no", "--", "testlanes", "--version"], consumer).trim(), manifest.version);
   const script = [
     "import { version } from 'testlanes';",
     "import Vitest from 'testlanes/vitest';",

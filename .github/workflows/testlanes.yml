@@ -8,7 +8,7 @@ on:
         type: string
         required: true
       runs-on:
-        description: Runner label or JSON array of labels for every job (Linux or macOS).
+        description: Runner label or JSON array of labels for every job (Linux, macOS, or Windows).
         type: string
         default: ubuntu-latest
       timeout-minutes:
@@ -80,68 +80,81 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       artifact: ${{ steps.plan.outputs.artifact }}
+      package-manager: ${{ steps.tools.outputs.package-manager }}
+      lockfile: ${{ steps.tools.outputs.lockfile }}
+      install: ${{ steps.tools.outputs.install }}
+      node-version-file: ${{ steps.tools.outputs.node-version-file }}
     steps:
-      - name: Check Out Code
+      - &checkout
+        name: Check Out Code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Detect Package Manager
         id: tools
+        # Runs once, before dependencies are installed, with the Node.js that GitHub-hosted runners provide.
+        shell: node {0}
         working-directory: ${{ inputs.working-directory }}
-        run: |
-          manager=npm
-          lockfile=package-lock.json
-          if [ -f pnpm-lock.yaml ]; then manager=pnpm; lockfile=pnpm-lock.yaml; elif [ -f yarn.lock ]; then manager=yarn; lockfile=yarn.lock; fi
-          declared=$(node -p "try { String(require('./package.json').packageManager || '').split('@')[0] } catch { '' }")
-          case "$declared" in npm|pnpm|yarn) manager=$declared ;; esac
-          case "$manager" in
-            pnpm) install='pnpm install --frozen-lockfile' ;;
-            yarn) if [ -f .yarnrc.yml ]; then install='yarn install --immutable'; else install='yarn install --frozen-lockfile'; fi ;;
-            *) install='npm ci' ;;
-          esac
-          version_file=
-          for candidate in .nvmrc .node-version package.json; do
-            if [ -f "$candidate" ]; then version_file="$candidate"; break; fi
-          done
-          {
-            echo "manager=$manager"
-            echo "lockfile=$lockfile"
-            echo "install=$install"
-            echo "version-file=${version_file:+$WORKING_DIRECTORY/$version_file}"
-          } >> "$GITHUB_OUTPUT"
         env:
           WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      - name: Set Up Node
+        run: |
+          const fs = require("node:fs");
+          const has = (file) => fs.existsSync(file);
+          let manager = has("pnpm-lock.yaml") ? "pnpm" : has("yarn.lock") ? "yarn" : "npm";
+          try {
+            const declared = String(JSON.parse(fs.readFileSync("package.json", "utf8")).packageManager || "").split("@")[0];
+            if (["npm", "pnpm", "yarn"].includes(declared)) manager = declared;
+          } catch {}
+          const install = {
+            npm: "npm ci",
+            pnpm: "pnpm install --frozen-lockfile",
+            yarn: has(".yarnrc.yml") ? "yarn install --immutable" : "yarn install --frozen-lockfile",
+          }[manager];
+          const versionFile = [".nvmrc", ".node-version", "package.json"].find(has);
+          const values = {
+            "package-manager": manager,
+            lockfile: { npm: "package-lock.json", pnpm: "pnpm-lock.yaml", yarn: "yarn.lock" }[manager],
+            install,
+            "node-version-file": versionFile ? `${process.env.WORKING_DIRECTORY}/${versionFile}` : "",
+          };
+          const lines = (format) => Object.entries(values).map(([key, value]) => `${format(key)}=${value}\n`).join("");
+          // Job outputs for the Test and Collect jobs, and environment variables for this job's later steps.
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, lines((key) => key));
+          fs.appendFileSync(process.env.GITHUB_ENV, lines((key) => `TESTLANES_${key.toUpperCase().replaceAll("-", "_")}`));
+      - &setup-node
+        name: Set Up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && steps.tools.outputs.version-file || '' }}
-          cache: ${{ steps.tools.outputs.manager == 'npm' && 'npm' || '' }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ steps.tools.outputs.lockfile }}
-      - name: Enable Corepack
-        if: steps.tools.outputs.manager != 'npm'
+          node-version-file: ${{ inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
+          cache: ${{ env.TESTLANES_PACKAGE_MANAGER == 'npm' && 'npm' || '' }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ env.TESTLANES_LOCKFILE }}
+      - &enable-corepack
+        name: Enable Corepack
+        if: env.TESTLANES_PACKAGE_MANAGER != 'npm'
         run: npm install --global corepack@0.36.0 && corepack enable
-      - name: Cache Package Manager Store
-        if: steps.tools.outputs.manager != 'npm'
+      - &cache-store
+        name: Cache Package Manager Store
+        if: env.TESTLANES_PACKAGE_MANAGER != 'npm'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && steps.tools.outputs.version-file || '' }}
-          cache: ${{ steps.tools.outputs.manager }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ steps.tools.outputs.lockfile }}
-      - name: Install Dependencies
+          node-version-file: ${{ inputs.node-version == '' && env.TESTLANES_NODE_VERSION_FILE || '' }}
+          cache: ${{ env.TESTLANES_PACKAGE_MANAGER }}
+          cache-dependency-path: ${{ inputs.working-directory }}/${{ env.TESTLANES_LOCKFILE }}
+      - &install
+        name: Install Dependencies
         working-directory: ${{ inputs.working-directory }}
-        env:
-          INSTALL_COMMAND: ${{ inputs.install-command || steps.tools.outputs.install }}
-        run: bash -eo pipefail -c "$INSTALL_COMMAND"
+        # The caller's command, run with the runner's default shell: Bash, or PowerShell on Windows.
+        run: ${{ inputs.install-command || env.TESTLANES_INSTALL }}
       - name: Find Trusted History
         id: history
         if: inputs.group-by != 'filesize'
         working-directory: ${{ inputs.working-directory }}
         env:
+          TESTLANES_INPUTS: ${{ toJSON(inputs) }}
           GITHUB_TOKEN: ${{ github.token }}
-          PREFIX: ${{ inputs.artifact-prefix }}
-        run: npx --no-install testlanes history --prefix "$PREFIX"
+        run: npx --no-install testlanes github history
       - name: Restore History
         if: steps.history.outputs.history-artifact != ''
         continue-on-error: true
@@ -156,21 +169,8 @@ jobs:
         id: plan
         working-directory: ${{ inputs.working-directory }}
         env:
-          FRAMEWORK: ${{ inputs.framework }}
-          SHARDS: ${{ inputs.shards }}
-          GROUP_BY: ${{ inputs.group-by }}
-          PATTERN: ${{ inputs.pattern }}
-          TEST_ARGS: ${{ inputs.test-args }}
-          PREFIX: ${{ inputs.artifact-prefix }}
-        run: |
-          if ! [[ "$PREFIX" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
-            echo "Artifact prefix must contain only letters, numbers, underscores, and hyphens." >&2
-            exit 1
-          fi
-          npx --no-install testlanes plan --framework "$FRAMEWORK" --shards "$SHARDS" --group-by "$GROUP_BY" \
-            --pattern "$PATTERN" --test-args "$TEST_ARGS" --timings "$RUNNER_TEMP/testlanes/history/timings.json" \
-            --out "$RUNNER_TEMP/testlanes/plan" --matrix workers
-          echo "artifact=$PREFIX-plan-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          TESTLANES_INPUTS: ${{ toJSON(inputs) }}
+        run: npx --no-install testlanes github prepare
       - name: Share Immutable Plan
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -184,66 +184,24 @@ jobs:
     needs: prepare
     runs-on: ${{ startsWith(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      TESTLANES_PACKAGE_MANAGER: ${{ needs.prepare.outputs.package-manager }}
+      TESTLANES_LOCKFILE: ${{ needs.prepare.outputs.lockfile }}
+      TESTLANES_INSTALL: ${{ needs.prepare.outputs.install }}
+      TESTLANES_NODE_VERSION_FILE: ${{ needs.prepare.outputs.node-version-file }}
     strategy:
       fail-fast: ${{ inputs.fail-fast }}
       max-parallel: ${{ inputs.max-parallel }}
       matrix:
         entry: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
-      - name: Check Out Code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Detect Package Manager
-        id: tools
-        working-directory: ${{ inputs.working-directory }}
-        run: |
-          manager=npm
-          lockfile=package-lock.json
-          if [ -f pnpm-lock.yaml ]; then manager=pnpm; lockfile=pnpm-lock.yaml; elif [ -f yarn.lock ]; then manager=yarn; lockfile=yarn.lock; fi
-          declared=$(node -p "try { String(require('./package.json').packageManager || '').split('@')[0] } catch { '' }")
-          case "$declared" in npm|pnpm|yarn) manager=$declared ;; esac
-          case "$manager" in
-            pnpm) install='pnpm install --frozen-lockfile' ;;
-            yarn) if [ -f .yarnrc.yml ]; then install='yarn install --immutable'; else install='yarn install --frozen-lockfile'; fi ;;
-            *) install='npm ci' ;;
-          esac
-          version_file=
-          for candidate in .nvmrc .node-version package.json; do
-            if [ -f "$candidate" ]; then version_file="$candidate"; break; fi
-          done
-          {
-            echo "manager=$manager"
-            echo "lockfile=$lockfile"
-            echo "install=$install"
-            echo "version-file=${version_file:+$WORKING_DIRECTORY/$version_file}"
-          } >> "$GITHUB_OUTPUT"
-        env:
-          WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      - name: Set Up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && steps.tools.outputs.version-file || '' }}
-          cache: ${{ steps.tools.outputs.manager == 'npm' && 'npm' || '' }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ steps.tools.outputs.lockfile }}
-      - name: Enable Corepack
-        if: steps.tools.outputs.manager != 'npm'
-        run: npm install --global corepack@0.36.0 && corepack enable
-      - name: Cache Package Manager Store
-        if: steps.tools.outputs.manager != 'npm'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && steps.tools.outputs.version-file || '' }}
-          cache: ${{ steps.tools.outputs.manager }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ steps.tools.outputs.lockfile }}
-      - name: Install Dependencies
-        working-directory: ${{ inputs.working-directory }}
-        env:
-          INSTALL_COMMAND: ${{ inputs.install-command || steps.tools.outputs.install }}
-        run: bash -eo pipefail -c "$INSTALL_COMMAND"
-      - name: Download Shared Plan
+      - *checkout
+      - *setup-node
+      - *enable-corepack
+      - *cache-store
+      - *install
+      - &download-plan
+        name: Download Shared Plan
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.prepare.outputs.artifact }}
@@ -251,18 +209,15 @@ jobs:
       - name: Set Up Application
         if: inputs.setup != ''
         working-directory: ${{ inputs.working-directory }}
-        env:
-          SETUP_SCRIPT: ${{ inputs.setup }}
-        run: bash -eo pipefail -c "$SETUP_SCRIPT"
+        # The caller's script, run with the runner's default shell: Bash, or PowerShell on Windows.
+        run: ${{ inputs.setup }}
       - name: Run Assigned Tests
         id: run
         working-directory: ${{ inputs.working-directory }}
         env:
-          SHARD: ${{ matrix.entry.shard }}
-          PREFIX: ${{ inputs.artifact-prefix }}
-        run: |
-          npx --no-install testlanes run --plan "$RUNNER_TEMP/testlanes/plan" --shard "$SHARD" --out "$RUNNER_TEMP/testlanes/result"
-          echo "artifact=$PREFIX-shard-$SHARD-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          TESTLANES_INPUTS: ${{ toJSON(inputs) }}
+          TESTLANES_SHARD: ${{ matrix.entry.shard }}
+        run: npx --no-install testlanes github run
       - name: Upload Measurements
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -276,65 +231,18 @@ jobs:
     needs: [prepare, test]
     runs-on: ${{ startsWith(inputs.runs-on, '[') && fromJSON(inputs.runs-on) || inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      TESTLANES_PACKAGE_MANAGER: ${{ needs.prepare.outputs.package-manager }}
+      TESTLANES_LOCKFILE: ${{ needs.prepare.outputs.lockfile }}
+      TESTLANES_INSTALL: ${{ needs.prepare.outputs.install }}
+      TESTLANES_NODE_VERSION_FILE: ${{ needs.prepare.outputs.node-version-file }}
     steps:
-      - name: Check Out Code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Detect Package Manager
-        id: tools
-        working-directory: ${{ inputs.working-directory }}
-        run: |
-          manager=npm
-          lockfile=package-lock.json
-          if [ -f pnpm-lock.yaml ]; then manager=pnpm; lockfile=pnpm-lock.yaml; elif [ -f yarn.lock ]; then manager=yarn; lockfile=yarn.lock; fi
-          declared=$(node -p "try { String(require('./package.json').packageManager || '').split('@')[0] } catch { '' }")
-          case "$declared" in npm|pnpm|yarn) manager=$declared ;; esac
-          case "$manager" in
-            pnpm) install='pnpm install --frozen-lockfile' ;;
-            yarn) if [ -f .yarnrc.yml ]; then install='yarn install --immutable'; else install='yarn install --frozen-lockfile'; fi ;;
-            *) install='npm ci' ;;
-          esac
-          version_file=
-          for candidate in .nvmrc .node-version package.json; do
-            if [ -f "$candidate" ]; then version_file="$candidate"; break; fi
-          done
-          {
-            echo "manager=$manager"
-            echo "lockfile=$lockfile"
-            echo "install=$install"
-            echo "version-file=${version_file:+$WORKING_DIRECTORY/$version_file}"
-          } >> "$GITHUB_OUTPUT"
-        env:
-          WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      - name: Set Up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && steps.tools.outputs.version-file || '' }}
-          cache: ${{ steps.tools.outputs.manager == 'npm' && 'npm' || '' }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ steps.tools.outputs.lockfile }}
-      - name: Enable Corepack
-        if: steps.tools.outputs.manager != 'npm'
-        run: npm install --global corepack@0.36.0 && corepack enable
-      - name: Cache Package Manager Store
-        if: steps.tools.outputs.manager != 'npm'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          node-version-file: ${{ inputs.node-version == '' && steps.tools.outputs.version-file || '' }}
-          cache: ${{ steps.tools.outputs.manager }}
-          cache-dependency-path: ${{ inputs.working-directory }}/${{ steps.tools.outputs.lockfile }}
-      - name: Install Dependencies
-        working-directory: ${{ inputs.working-directory }}
-        env:
-          INSTALL_COMMAND: ${{ inputs.install-command || steps.tools.outputs.install }}
-        run: bash -eo pipefail -c "$INSTALL_COMMAND"
-      - name: Download Shared Plan
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: ${{ needs.prepare.outputs.artifact }}
-          path: ${{ runner.temp }}/testlanes/plan
+      - *checkout
+      - *setup-node
+      - *enable-corepack
+      - *cache-store
+      - *install
+      - *download-plan
       - name: Download Measurements
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -342,7 +250,9 @@ jobs:
           path: ${{ runner.temp }}/testlanes/results
       - name: Validate and Combine Measurements
         working-directory: ${{ inputs.working-directory }}
-        run: npx --no-install testlanes collect --plan "$RUNNER_TEMP/testlanes/plan" --results "$RUNNER_TEMP/testlanes/results" --out "$RUNNER_TEMP/testlanes/baseline/timings.json"
+        env:
+          TESTLANES_INPUTS: ${{ toJSON(inputs) }}
+        run: npx --no-install testlanes github collect
       - name: Publish Trusted Baseline
         if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -4,7 +4,7 @@
 
 testlanes splits a Vitest, Jest, or node:test suite into shards whose measured runtimes are balanced, runs them as GitHub Actions jobs, and keeps per-file timing history in GitHub Actions artifacts. It ports the design of [parallel_tests-ci](https://github.com/dblock/parallel_tests-ci) to JavaScript.
 
-It supports Vitest 3 through 5, Jest 29 and 30, and node:test on Node.js 22.12 or newer on GitHub Actions Linux and macOS runners. Non-goals are a hosted service, other CI providers, Windows runners, dynamic queue mode, automatic shard sizing, splitting tests within a file, Yarn Plug'n'Play, and browser end-to-end runners such as Playwright or Cypress. Worker-name templates, environment and secret inputs, and extra artifact paths are planned follow-ups.
+It supports Vitest 3 through 5, Jest 29 and 30, and node:test on Node.js 22.12 or newer on GitHub Actions Linux, macOS, and Windows runners. Non-goals are a hosted service, other CI providers, dynamic queue mode, automatic shard sizing, splitting tests within a file, Yarn Plug'n'Play, and browser end-to-end runners such as Playwright or Cypress. Worker-name templates, environment and secret inputs, and extra artifact paths are planned follow-ups.
 
 The source is ESM JavaScript with JSDoc types. `tsc --checkJs` checks types during linting, and generated declarations ship in `types/` without a build step for runtime code. The only runtime dependency is [tinyglobby](https://github.com/SuperchupuDev/tinyglobby), for the optional `pattern`.
 
@@ -60,6 +60,12 @@ Every job checks out the code without persisting credentials, detects npm, pnpm,
 | Missing timings | Allowed per shard, but collection requires at least one timing overall. |
 
 Artifacts are named `<prefix>-plan-<attempt>`, `<prefix>-shard-<shard>-<attempt>`, and `<prefix>-timings`. Prefixes contain only letters, numbers, underscores, and hyphens.
+
+### Workflow Steps
+
+Every step in `testlanes.yml` runs the same way on Linux, macOS, and Windows. The testlanes steps are one-line `npx --no-install testlanes github history|prepare|run|collect` commands that read the workflow's `toJSON(inputs)` from `TESTLANES_INPUTS` and the shard from `TESTLANES_SHARD`, keep files under `RUNNER_TEMP/testlanes`, validate the artifact prefix, and write step outputs, including artifact names, to `GITHUB_OUTPUT`. Keeping the logic in the CLI avoids duplicating shell code per OS and passing JSON or empty arguments through `npx`, which is a batch shim on Windows. Script files in this repository are not available in a caller's job, so the logic lives in the caller's installed package, as parallel_tests-ci does with `PTCI_INPUTS`.
+
+Package manager detection runs before testlanes is installed, so it is a short JavaScript step with `shell: node {0}`, using the Node.js that GitHub-hosted runners provide. It runs once, in Prepare, and passes its results to the Test and Collect jobs as job outputs; every job reads them as `TESTLANES_*` environment variables, so the checkout, Node.js, Corepack, cache, and install steps are defined once with YAML anchors and reused with aliases. `install-command` and `setup` are the caller's own scripts and run as the step body with the runner's default shell, Bash on Linux and macOS and PowerShell on Windows. The CLI resolves its working directory with `realpathSync.native`, because Windows temporary paths may use short names while test runners report long ones; it passes the node:test reporter as a file URL and Vitest forward-slash absolute paths.
 
 ## Trust
 

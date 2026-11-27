@@ -10,15 +10,16 @@ permissions:
 
 jobs:
   test:
-    name: Test on Node ${{ matrix.entry.node }} with Vitest ${{ matrix.entry.vitest }} and Jest ${{ matrix.entry.jest }}
-    runs-on: ubuntu-latest
+    name: Test on Node ${{ matrix.entry.node }} with Vitest ${{ matrix.entry.vitest }} and Jest ${{ matrix.entry.jest }} on ${{ matrix.entry.os }}
+    runs-on: ${{ matrix.entry.os }}
     strategy:
       fail-fast: false
       matrix:
         entry:
-          - { node: "22.12.0", vitest: "3.2.7", jest: "29.7.0" }
-          - { node: "24.22.3", vitest: "4.1.12", jest: "30.5.2" }
-          - { node: "26.13.1", vitest: "5.1.2", jest: "30.5.2" }
+          - { node: "22.12.0", vitest: "3.2.7", jest: "29.7.0", os: ubuntu-latest }
+          - { node: "24.22.3", vitest: "4.1.12", jest: "30.5.2", os: ubuntu-latest }
+          - { node: "26.13.1", vitest: "5.1.2", jest: "30.5.2", os: ubuntu-latest }
+          - { node: "26.13.1", vitest: "5.1.2", jest: "30.5.2", os: windows-latest }
     steps:
       - name: Check Out Source
         uses: actions/checkout@v7.0.1

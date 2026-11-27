@@ -67,3 +67,22 @@ jobs:
       artifact-prefix: integration-configuration-${{ matrix.entry.framework }}-${{ matrix.entry.kernel }}
       artifact-retention-days: 1
       timings-retention-days: 1
+
+  windows:
+    name: Exercise Windows (${{ matrix.entry.framework }})
+    strategy:
+      fail-fast: false
+      matrix:
+        entry:
+          - { framework: vitest }
+          - { framework: jest }
+          - { framework: node }
+    uses: ./.github/workflows/testlanes.yml
+    with:
+      framework: ${{ matrix.entry.framework }}
+      runs-on: windows-latest
+      working-directory: fixtures/${{ matrix.entry.framework }}
+      install-command: npm ci --prefix ../.. && npm ci
+      setup: if ($env:OS -ne 'Windows_NT') { exit 1 }
+      shards: 2
+      artifact-prefix: integration-windows-${{ matrix.entry.framework }}
