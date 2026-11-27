@@ -125,3 +125,10 @@ test("the reusable workflow sets up Node.js before running any JavaScript step",
   assert.doesNotMatch(workflow, /TESTLANES_NODE_VERSION_FILE|TESTLANES_LOCKFILE/u);
   assert.match(workflow, /node-version-file: \$\{\{ inputs\.install-node-version == '' && inputs\.node-version == '' && \(hashFiles\(/u);
 });
+
+test("the reusable workflow collects timings only on default-branch pushes", async () => {
+  const workflow = await read(".github/workflows/testlanes.yml");
+  const collect = workflow.slice(workflow.indexOf("\n  collect:\n"));
+  assert.match(collect, /^\n {2}collect:\n {4}name: Collect Timings\n {4}needs: \[prepare, test\]\n(?: {4}#.*\n)? {4}if: github\.event_name == 'push' && github\.ref == format\('refs\/heads\/\{0\}', github\.event\.repository\.default_branch\)\n/u);
+  assert.match(collect, /- name: Publish Trusted Baseline\n {8}uses: /u);
+});
