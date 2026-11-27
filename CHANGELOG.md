@@ -1,13 +1,12 @@
 # Changelog
 
-## 0.2.0 (Next)
+## 0.2.0 (2026/11/27)
 
 - [#9](https://github.com/dblock/testlanes/pull/9): Remove the hard-coded `TESTLANES_VERSION` from the reusable workflow, which runs the caller's installed testlanes, so releases never edit workflow files that the release workflow's `GITHUB_TOKEN` cannot push - [@dblock](https://github.com/dblock).
 - [#10](https://github.com/dblock/testlanes/pull/10): Support Windows runners, moving the reusable workflow's logic into `testlanes github` commands so every step runs the same way on Linux, macOS, and Windows - [@dblock](https://github.com/dblock).
 - [#11](https://github.com/dblock/testlanes/pull/11): Add `test-wrapper` to run shards behind a command such as c8, and `artifacts` to upload paths such as coverage reports from every shard - [@dblock](https://github.com/dblock).
 - [#13](https://github.com/dblock/testlanes/pull/13): Add `install-node-version` to install dependencies with a different Node.js than the one that runs tests - [@dblock](https://github.com/dblock).
 - [#15](https://github.com/dblock/testlanes/pull/15): Run the standalone action through `testlanes github matrix` without a version pin, remove the `history` command and the `--expect-version` and `--matrix` options, and stop caching pnpm and Yarn stores - [@dblock](https://github.com/dblock).
-- Your contribution here.
 
 ## 0.1.0 (2026/11/26)
 
