@@ -16,8 +16,7 @@ Commands:
   plan      Select test files and assign them to shards.
   run       Run one shard of a prepared plan and record its timings.
   collect   Validate shard results and merge their timings into a baseline.
-  history   Find the newest trusted timing baseline in GitHub Actions.
-  github    Run one step of the testlanes reusable workflow.
+  github    Run one step of the testlanes reusable workflow or standalone action.
 
 Run testlanes <command> --help for options.
 `;
@@ -34,10 +33,10 @@ const commands = {
       "test-args": { type: "string", default: "[]" },
       "test-wrapper": { type: "string", default: "[]" },
       out: { type: "string", default: "" },
-      matrix: { type: "string", default: "files" },
-      "expect-version": { type: "string", default: "" },
     },
     help: `Usage: testlanes plan --framework <vitest|jest|node> [options]
+
+Prints a JSON matrix of shard numbers and their assigned files.
 
 Options:
   --shards <n>             Maximum number of shards, from 1 to 256 (default 4).
@@ -47,8 +46,6 @@ Options:
   --test-args <json>       JSON array of extra framework arguments (default []).
   --test-wrapper <json>    JSON array of a command and arguments that wrap test runs, such as c8 (default []).
   --out <directory>        Write plan.json to this directory.
-  --matrix <files|workers> Matrix entries with assigned files or display names (default files).
-  --expect-version <v>     Fail unless the installed testlanes version matches.
 `,
   },
   run: {
@@ -70,20 +67,14 @@ Options:
     help: `Usage: testlanes collect --plan <directory> --results <directory> --out <file>
 `,
   },
-  history: {
-    options: {
-      prefix: { type: "string", default: "testlanes" },
-    },
-    help: `Usage: testlanes history [--prefix <artifact-prefix>]
-`,
-  },
   github: {
     options: {},
-    help: `Usage: testlanes github <history|prepare|run|collect>
+    help: `Usage: testlanes github <history|prepare|run|collect|matrix>
 
-Runs one step of the testlanes reusable workflow. Reads the workflow's inputs
-from TESTLANES_INPUTS (toJSON(inputs)), the shard from TESTLANES_SHARD, keeps
-files under RUNNER_TEMP/testlanes, and writes step outputs to GITHUB_OUTPUT.
+Runs one step of the testlanes reusable workflow, or the standalone action's
+matrix step. Reads the inputs from TESTLANES_INPUTS (toJSON(inputs)), the shard
+from TESTLANES_SHARD, keeps workflow files under RUNNER_TEMP/testlanes, and
+writes step outputs to GITHUB_OUTPUT.
 `,
   },
 };
@@ -98,6 +89,7 @@ files under RUNNER_TEMP/testlanes, and writes step outputs to GITHUB_OUTPUT.
 export async function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr, env = process.env } = {}) {
   // Test runners report long paths, so expand Windows short (8.3) names before computing relative paths.
   cwd = realpathSync.native(cwd);
+  const io = { cwd, stdout, stderr, env };
   const [name, ...rest] = argv;
   if (name === "--version" || name === "-v") {
     stdout.write(`${version}\n`);
@@ -117,11 +109,11 @@ export async function main(argv, { cwd = process.cwd(), stdout = process.stdout,
       stdout.write(command.help);
       return 0;
     }
-    if (name === "github") return await github(rest, { cwd, stdout, stderr, env });
+    if (name === "github") return await github(rest, io);
     const { values } = parseArgs({ args: rest, options: command.options, strict: true, allowPositionals: false });
     switch (name) {
       case "plan":
-        return await plan(/** @type {Record<string, string>} */ (values), { cwd, stdout, stderr, env });
+        return await plan(/** @type {Record<string, string>} */ (values), "files", io);
       case "run":
         return await runShard({
           plan: requireOption(values, "plan"),
@@ -131,13 +123,11 @@ export async function main(argv, { cwd = process.cwd(), stdout = process.stdout,
           cwd,
           version,
         });
-      case "collect": {
+      default: {
         const combined = await collect({ plan: requireOption(values, "plan"), results: requireOption(values, "results"), out: requireOption(values, "out") });
         stderr.write(`Collected timings for ${Object.keys(combined).length} files.\n`);
         return 0;
       }
-      default:
-        return await history(String(values.prefix), { stderr, env });
     }
   } catch (error) {
     stderr.write(`testlanes: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -146,17 +136,14 @@ export async function main(argv, { cwd = process.cwd(), stdout = process.stdout,
 }
 
 /**
+ * Plans shards and writes the matrix to standard output and `GITHUB_OUTPUT`.
+ *
  * @param {Record<string, string>} values
+ * @param {"files" | "workers"} kind Matrix entries with assigned files, or with workflow job names.
  * @param {{ cwd: string, stdout: NodeJS.WritableStream, stderr: NodeJS.WritableStream, env: NodeJS.ProcessEnv }} io
  * @returns {Promise<number>}
  */
-async function plan(values, { cwd, stdout, stderr, env }) {
-  if (values["expect-version"] && values["expect-version"] !== version) {
-    throw new Error(`testlanes ${version} is installed, but version ${values["expect-version"]} was expected; keep the package and workflow versions matched.`);
-  }
-  if (values.matrix !== "files" && values.matrix !== "workers") {
-    throw new Error(`Invalid matrix ${JSON.stringify(values.matrix)}; expected files or workers.`);
-  }
+async function plan(values, kind, { cwd, stdout, stderr, env }) {
   let testArgs;
   try {
     testArgs = testArguments(JSON.parse(values["test-args"]));
@@ -185,7 +172,7 @@ async function plan(values, { cwd, stdout, stderr, env }) {
     await mkdir(values.out, { recursive: true });
     await writeFile(join(values.out, "plan.json"), formatPlan(prepared));
   }
-  const matrix = JSON.stringify(values.matrix === "workers" ? workerMatrix(prepared) : fileMatrix(prepared));
+  const matrix = JSON.stringify(kind === "workers" ? workerMatrix(prepared) : fileMatrix(prepared));
   await writeOutputs({ matrix, "group-by": prepared.groupBy, shards: prepared.groups.length }, env);
   stdout.write(`${matrix}\n`);
   stderr.write(`Prepared ${prepared.groups.length} shards of ${Object.keys(files).length} files using ${prepared.groupBy} grouping.\n`);
@@ -193,6 +180,70 @@ async function plan(values, { cwd, stdout, stderr, env }) {
 }
 
 /**
+ * Runs one step of the reusable workflow or the standalone action from its JSON inputs.
+ *
+ * @param {string[]} args
+ * @param {{ cwd: string, stdout: NodeJS.WritableStream, stderr: NodeJS.WritableStream, env: NodeJS.ProcessEnv }} io
+ * @returns {Promise<number>}
+ */
+async function github(args, io) {
+  const { env, cwd, stderr } = io;
+  const [step, ...extra] = args;
+  if (extra.length > 0) throw new Error(`Unexpected arguments: ${extra.join(" ")}.`);
+  if (!["history", "prepare", "run", "collect", "matrix"].includes(step)) {
+    throw new Error(`Unknown github step ${JSON.stringify(step)}; expected history, prepare, run, collect, or matrix.`);
+  }
+  let inputs;
+  try {
+    inputs = JSON.parse(requiredEnv(env, "TESTLANES_INPUTS"));
+  } catch (error) {
+    if (error instanceof SyntaxError) inputs = undefined;
+    else throw error;
+  }
+  if (inputs === null || typeof inputs !== "object" || Array.isArray(inputs)) {
+    throw new Error("TESTLANES_INPUTS must be a JSON object of workflow inputs.");
+  }
+  /** @param {string} key @param {string} fallback */
+  const input = (key, fallback) => (inputs[key] === undefined || inputs[key] === null ? fallback : String(inputs[key]));
+  /** @param {string} timings @param {string} out */
+  const planValues = (timings, out) => ({
+    framework: input("framework", ""),
+    shards: input("shards", "4"),
+    "group-by": input("group-by", "auto"),
+    pattern: input("pattern", ""),
+    timings,
+    "test-args": input("test-args", "[]"),
+    "test-wrapper": input("test-wrapper", "[]"),
+    out,
+  });
+  if (step === "matrix") return await plan(planValues(input("timings", ""), ""), "files", io);
+  const prefix = artifactPrefix(input("artifact-prefix", "testlanes"));
+  const base = join(requiredEnv(env, "RUNNER_TEMP"), "testlanes");
+  const attempt = env.GITHUB_RUN_ATTEMPT || "1";
+  switch (step) {
+    case "history":
+      return await history(prefix, io);
+    case "prepare":
+      await plan(planValues(join(base, "history", "timings.json"), join(base, "plan")), "workers", io);
+      await writeOutputs({ artifact: `${prefix}-plan-${attempt}` }, env);
+      return 0;
+    case "run": {
+      const shard = positiveInteger(requiredEnv(env, "TESTLANES_SHARD"), "shard");
+      const code = await runShard({ plan: join(base, "plan"), shard, attempt, out: join(base, "result"), cwd, version });
+      if (code === 0) await writeOutputs({ artifact: `${prefix}-shard-${shard}-${attempt}` }, env);
+      return code;
+    }
+    default: {
+      const combined = await collect({ plan: join(base, "plan"), results: join(base, "results"), out: join(base, "baseline", "timings.json") });
+      stderr.write(`Collected timings for ${Object.keys(combined).length} files.\n`);
+      return 0;
+    }
+  }
+}
+
+/**
+ * Writes the newest trusted timing baseline to `GITHUB_OUTPUT`; lookup failures are warnings.
+ *
  * @param {string} prefix
  * @param {{ stderr: NodeJS.WritableStream, env: NodeJS.ProcessEnv }} io
  * @returns {Promise<number>}
@@ -212,67 +263,6 @@ async function history(prefix, { stderr, env }) {
   await writeOutputs({ "history-run": found.run, "history-artifact": found.artifact }, env);
   stderr.write(`Found timing history in run ${found.run}.\n`);
   return 0;
-}
-
-/**
- * Runs one step of the reusable workflow from its JSON inputs.
- *
- * @param {string[]} args
- * @param {{ cwd: string, stdout: NodeJS.WritableStream, stderr: NodeJS.WritableStream, env: NodeJS.ProcessEnv }} io
- * @returns {Promise<number>}
- */
-async function github(args, io) {
-  const { env, cwd, stderr } = io;
-  const [step, ...extra] = args;
-  if (extra.length > 0) throw new Error(`Unexpected arguments: ${extra.join(" ")}.`);
-  if (!["history", "prepare", "run", "collect"].includes(step)) {
-    throw new Error(`Unknown github step ${JSON.stringify(step)}; expected history, prepare, run, or collect.`);
-  }
-  let inputs;
-  try {
-    inputs = JSON.parse(requiredEnv(env, "TESTLANES_INPUTS"));
-  } catch (error) {
-    if (error instanceof SyntaxError) inputs = undefined;
-    else throw error;
-  }
-  if (inputs === null || typeof inputs !== "object" || Array.isArray(inputs)) {
-    throw new Error("TESTLANES_INPUTS must be a JSON object of workflow inputs.");
-  }
-  /** @param {string} key @param {string} fallback */
-  const input = (key, fallback) => (inputs[key] === undefined || inputs[key] === null ? fallback : String(inputs[key]));
-  const prefix = artifactPrefix(input("artifact-prefix", "testlanes"));
-  const base = join(requiredEnv(env, "RUNNER_TEMP"), "testlanes");
-  const attempt = env.GITHUB_RUN_ATTEMPT || "1";
-  switch (step) {
-    case "history":
-      return await history(prefix, io);
-    case "prepare":
-      await plan({
-        framework: input("framework", ""),
-        shards: input("shards", "4"),
-        "group-by": input("group-by", "auto"),
-        pattern: input("pattern", ""),
-        timings: join(base, "history", "timings.json"),
-        "test-args": input("test-args", "[]"),
-        "test-wrapper": input("test-wrapper", "[]"),
-        out: join(base, "plan"),
-        matrix: "workers",
-        "expect-version": "",
-      }, io);
-      await writeOutputs({ artifact: `${prefix}-plan-${attempt}` }, env);
-      return 0;
-    case "run": {
-      const shard = positiveInteger(requiredEnv(env, "TESTLANES_SHARD"), "shard");
-      const code = await runShard({ plan: join(base, "plan"), shard, attempt, out: join(base, "result"), cwd, version });
-      if (code === 0) await writeOutputs({ artifact: `${prefix}-shard-${shard}-${attempt}` }, env);
-      return code;
-    }
-    default: {
-      const combined = await collect({ plan: join(base, "plan"), results: join(base, "results"), out: join(base, "baseline", "timings.json") });
-      stderr.write(`Collected timings for ${Object.keys(combined).length} files.\n`);
-      return 0;
-    }
-  }
 }
 
 /**
