@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
@@ -77,6 +77,73 @@ for (const name of /** @type {const} */ (["vitest", "jest", "node"])) {
     });
   });
 }
+
+describe("github workflow steps", () => {
+  test("prepare, run, and collect from workflow inputs and write step outputs", async () => {
+    const cwd = await project("node");
+    const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
+    const output = join(temp, "github-output");
+    const env = (/** @type {Record<string, string>} */ extra = {}) => ({
+      TESTLANES_INPUTS: JSON.stringify({ framework: "node", shards: 2, "group-by": "auto", pattern: "", "test-args": "[]", "artifact-prefix": "lanes", setup: "" }),
+      RUNNER_TEMP: temp,
+      GITHUB_OUTPUT: output,
+      GITHUB_RUN_ATTEMPT: "3",
+      ...extra,
+    });
+    await writeFile(output, "");
+    const prepared = cli(["github", "prepare"], { cwd, env: env() });
+    assert.equal(prepared.code, 0, prepared.stderr);
+    const outputs = await readFile(output, "utf8");
+    assert.match(outputs, /^matrix=\[\{"shard":1,"name":"1 of 2"\},\{"shard":2,"name":"2 of 2"\}\]\ngroup-by=filesize\nshards=2\nartifact=lanes-plan-3\n$/u);
+    assert.ok(existsSync(join(temp, "testlanes", "plan", "plan.json")));
+    for (const shard of ["1", "2"]) {
+      await writeFile(output, "");
+      const ran = cli(["github", "run"], { cwd, env: env({ TESTLANES_SHARD: shard }) });
+      assert.equal(ran.code, 0, ran.stderr);
+      assert.equal(await readFile(output, "utf8"), `artifact=lanes-shard-${shard}-3\n`);
+      await cp(join(temp, "testlanes", "result"), join(temp, "testlanes", "results", `lanes-shard-${shard}-3`), { recursive: true });
+    }
+    const collected = cli(["github", "collect"], { cwd, env: env() });
+    assert.equal(collected.code, 0, collected.stderr);
+    assert.equal(Object.keys(JSON.parse(await readFile(join(temp, "testlanes", "baseline", "timings.json"), "utf8"))).length, 5);
+  });
+
+  test("writes no artifact output when a shard fails", async () => {
+    const cwd = await project("node");
+    const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
+    const output = join(temp, "github-output");
+    const env = { TESTLANES_INPUTS: JSON.stringify({ framework: "node", shards: 1 }), RUNNER_TEMP: temp, GITHUB_OUTPUT: output, TESTLANES_SHARD: "1" };
+    await writeFile(join(cwd, "specs", "alpha.test.js"), 'import { test } from "node:test";\ntest("fails", () => { throw new Error("boom"); });\n');
+    assert.equal(cli(["github", "prepare"], { cwd, env }).code, 0);
+    await writeFile(output, "");
+    assert.equal(cli(["github", "run"], { cwd, env }).code, 1);
+    assert.equal(await readFile(output, "utf8"), "");
+  });
+
+  test("rejects invalid workflow steps and inputs", async () => {
+    const cwd = await project("node");
+    const temp = await mkdtemp(join(tmpdir(), "testlanes-runner-"));
+    const base = { TESTLANES_INPUTS: '{"framework":"node"}', RUNNER_TEMP: temp };
+    /** @type {[string[], Record<string, string>, RegExp][]} */
+    const cases = [
+      [["github", "deploy"], base, /Unknown github step "deploy"; expected history, prepare, run, or collect\./u],
+      [["github"], base, /Unknown github step undefined; expected history, prepare, run, or collect\./u],
+      [["github", "prepare", "extra"], base, /Unexpected arguments: extra\./u],
+      [["github", "prepare"], { ...base, TESTLANES_INPUTS: "" }, /TESTLANES_INPUTS is not set\./u],
+      [["github", "prepare"], { ...base, TESTLANES_INPUTS: "{" }, /TESTLANES_INPUTS must be a JSON object of workflow inputs\./u],
+      [["github", "prepare"], { ...base, TESTLANES_INPUTS: "[]" }, /TESTLANES_INPUTS must be a JSON object of workflow inputs\./u],
+      [["github", "prepare"], { ...base, TESTLANES_INPUTS: '{"framework":"node","artifact-prefix":"a b"}' }, /Artifact prefix must contain only letters/u],
+      [["github", "prepare"], { ...base, RUNNER_TEMP: "" }, /RUNNER_TEMP is not set\./u],
+      [["github", "run"], base, /TESTLANES_SHARD is not set\./u],
+    ];
+    for (const [args, env, message] of cases) {
+      const result = cli(args, { cwd, env });
+      assert.equal(result.code, 1, args.join(" "));
+      assert.match(result.stderr, message, args.join(" "));
+    }
+    assert.match(cli(["github", "--help"], { cwd }).stdout, /Usage: testlanes github <history\|prepare\|run\|collect>/u);
+  });
+});
 
 describe("run safeguards", () => {
   test("fails when Vitest runs files other than the assigned ones", async () => {

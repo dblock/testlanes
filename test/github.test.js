@@ -69,6 +69,13 @@ describe("github", () => {
     assert.equal(await readFile(env.GITHUB_OUTPUT, "utf8"), "history-run=6\nhistory-artifact=60\n");
   });
 
+  test("finds history as the reusable workflow's history step", async () => {
+    const env = await environment();
+    const result = await cli(["github", "history"], { cwd: tmpdir(), env: { ...env, TESTLANES_INPUTS: '{"artifact-prefix":"lanes"}', RUNNER_TEMP: tmpdir() } });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(await readFile(env.GITHUB_OUTPUT, "utf8"), "history-run=6\nhistory-artifact=60\n");
+  });
+
   test("reports no history and API failures without failing", async () => {
     routes = {
       "/repos/owner/repo/actions/runs/7": { workflow_id: 42 },

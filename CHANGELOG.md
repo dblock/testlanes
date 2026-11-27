@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.1.1 (Next)
+## 0.2.0 (Next)
 
 - [#9](https://github.com/dblock/testlanes/pull/9): Remove the hard-coded `TESTLANES_VERSION` from the reusable workflow, which runs the caller's installed testlanes, so releases never edit workflow files that the release workflow's `GITHUB_TOKEN` cannot push - [@dblock](https://github.com/dblock).
+- [#10](https://github.com/dblock/testlanes/pull/10): Support Windows runners, moving the reusable workflow's logic into `testlanes github` commands so every step runs the same way on Linux, macOS, and Windows - [@dblock](https://github.com/dblock).
 - Your contribution here.
 
 ## 0.1.0 (2026/11/26)

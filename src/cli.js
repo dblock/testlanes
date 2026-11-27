@@ -1,12 +1,12 @@
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { collect } from "./collect.js";
 import { discover } from "./discover.js";
-import { findHistory, writeOutputs } from "./github.js";
+import { artifactPrefix, findHistory, requiredEnv, writeOutputs } from "./github.js";
 import { version } from "./index.js";
-import { createPlan, fileMatrix, formatPlan, testArguments, workerMatrix } from "./plan.js";
+import { createPlan, fileMatrix, formatPlan, positiveInteger, testArguments, workerMatrix } from "./plan.js";
 import { runShard } from "./run.js";
 import { readTimings } from "./timings.js";
 
@@ -17,6 +17,7 @@ Commands:
   run       Run one shard of a prepared plan and record its timings.
   collect   Validate shard results and merge their timings into a baseline.
   history   Find the newest trusted timing baseline in GitHub Actions.
+  github    Run one step of the testlanes reusable workflow.
 
 Run testlanes <command> --help for options.
 `;
@@ -74,6 +75,15 @@ Options:
     help: `Usage: testlanes history [--prefix <artifact-prefix>]
 `,
   },
+  github: {
+    options: {},
+    help: `Usage: testlanes github <history|prepare|run|collect>
+
+Runs one step of the testlanes reusable workflow. Reads the workflow's inputs
+from TESTLANES_INPUTS (toJSON(inputs)), the shard from TESTLANES_SHARD, keeps
+files under RUNNER_TEMP/testlanes, and writes step outputs to GITHUB_OUTPUT.
+`,
+  },
 };
 
 /**
@@ -84,6 +94,8 @@ Options:
  * @returns {Promise<number>}
  */
 export async function main(argv, { cwd = process.cwd(), stdout = process.stdout, stderr = process.stderr, env = process.env } = {}) {
+  // Test runners report long paths, so expand Windows short (8.3) names before computing relative paths.
+  cwd = realpathSync.native(cwd);
   const [name, ...rest] = argv;
   if (name === "--version" || name === "-v") {
     stdout.write(`${version}\n`);
@@ -103,6 +115,7 @@ export async function main(argv, { cwd = process.cwd(), stdout = process.stdout,
       stdout.write(command.help);
       return 0;
     }
+    if (name === "github") return await github(rest, { cwd, stdout, stderr, env });
     const { values } = parseArgs({ args: rest, options: command.options, strict: true, allowPositionals: false });
     switch (name) {
       case "plan":
@@ -191,6 +204,66 @@ async function history(prefix, { stderr, env }) {
   await writeOutputs({ "history-run": found.run, "history-artifact": found.artifact }, env);
   stderr.write(`Found timing history in run ${found.run}.\n`);
   return 0;
+}
+
+/**
+ * Runs one step of the reusable workflow from its JSON inputs.
+ *
+ * @param {string[]} args
+ * @param {{ cwd: string, stdout: NodeJS.WritableStream, stderr: NodeJS.WritableStream, env: NodeJS.ProcessEnv }} io
+ * @returns {Promise<number>}
+ */
+async function github(args, io) {
+  const { env, cwd, stderr } = io;
+  const [step, ...extra] = args;
+  if (extra.length > 0) throw new Error(`Unexpected arguments: ${extra.join(" ")}.`);
+  if (!["history", "prepare", "run", "collect"].includes(step)) {
+    throw new Error(`Unknown github step ${JSON.stringify(step)}; expected history, prepare, run, or collect.`);
+  }
+  let inputs;
+  try {
+    inputs = JSON.parse(requiredEnv(env, "TESTLANES_INPUTS"));
+  } catch (error) {
+    if (error instanceof SyntaxError) inputs = undefined;
+    else throw error;
+  }
+  if (inputs === null || typeof inputs !== "object" || Array.isArray(inputs)) {
+    throw new Error("TESTLANES_INPUTS must be a JSON object of workflow inputs.");
+  }
+  /** @param {string} key @param {string} fallback */
+  const input = (key, fallback) => (inputs[key] === undefined || inputs[key] === null ? fallback : String(inputs[key]));
+  const prefix = artifactPrefix(input("artifact-prefix", "testlanes"));
+  const base = join(requiredEnv(env, "RUNNER_TEMP"), "testlanes");
+  const attempt = env.GITHUB_RUN_ATTEMPT || "1";
+  switch (step) {
+    case "history":
+      return await history(prefix, io);
+    case "prepare":
+      await plan({
+        framework: input("framework", ""),
+        shards: input("shards", "4"),
+        "group-by": input("group-by", "auto"),
+        pattern: input("pattern", ""),
+        timings: join(base, "history", "timings.json"),
+        "test-args": input("test-args", "[]"),
+        out: join(base, "plan"),
+        matrix: "workers",
+        "expect-version": "",
+      }, io);
+      await writeOutputs({ artifact: `${prefix}-plan-${attempt}` }, env);
+      return 0;
+    case "run": {
+      const shard = positiveInteger(requiredEnv(env, "TESTLANES_SHARD"), "shard");
+      const code = await runShard({ plan: join(base, "plan"), shard, attempt, out: join(base, "result"), cwd, version });
+      if (code === 0) await writeOutputs({ artifact: `${prefix}-shard-${shard}-${attempt}` }, env);
+      return code;
+    }
+    default: {
+      const combined = await collect({ plan: join(base, "plan"), results: join(base, "results"), out: join(base, "baseline", "timings.json") });
+      stderr.write(`Collected timings for ${Object.keys(combined).length} files.\n`);
+      return 0;
+    }
+  }
 }
 
 /**

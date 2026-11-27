@@ -17,7 +17,8 @@ export async function project(name) {
   const directory = await mkdtemp(join(tmpdir(), `testlanes-${name}-`));
   await cp(join(root, "fixtures", name, "specs"), join(directory, "specs"), { recursive: true });
   await cp(join(root, "fixtures", name, "package.json"), join(directory, "package.json"));
-  await symlink(join(root, "node_modules"), join(directory, "node_modules"), "dir");
+  // Windows creates directory junctions without extra privileges.
+  await symlink(join(root, "node_modules"), join(directory, "node_modules"), process.platform === "win32" ? "junction" : "dir");
   return directory;
 }
 

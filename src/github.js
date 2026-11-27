@@ -42,8 +42,8 @@ export async function writeOutputs(values, env = process.env) {
  */
 export async function findHistory({ prefix, env = process.env }) {
   const name = `${artifactPrefix(prefix)}-timings`;
-  const repository = required(env, "GITHUB_REPOSITORY");
-  const event = JSON.parse(await readFile(required(env, "GITHUB_EVENT_PATH"), "utf8"));
+  const repository = requiredEnv(env, "GITHUB_REPOSITORY");
+  const event = JSON.parse(await readFile(requiredEnv(env, "GITHUB_EVENT_PATH"), "utf8"));
   const branch = event?.repository?.default_branch;
   if (typeof branch !== "string") throw new Error("The event payload does not name the default branch.");
   const base = (env.GITHUB_API_URL || "https://api.github.com").replace(/\/$/u, "");
@@ -52,14 +52,14 @@ export async function findHistory({ prefix, env = process.env }) {
     const response = await fetch(`${base}/${path}`, {
       headers: {
         Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${required(env, "GITHUB_TOKEN")}`,
+        Authorization: `Bearer ${requiredEnv(env, "GITHUB_TOKEN")}`,
         "X-GitHub-Api-Version": "2022-11-28",
       },
     });
     if (!response.ok) throw new Error(`GitHub API request for ${path} failed with status ${response.status}.`);
     return response.json();
   };
-  const current = await api(`repos/${repository}/actions/runs/${required(env, "GITHUB_RUN_ID")}`);
+  const current = await api(`repos/${repository}/actions/runs/${requiredEnv(env, "GITHUB_RUN_ID")}`);
   const query = new URLSearchParams({ branch, event: "push", status: "success", per_page: "20" });
   const { workflow_runs: runs } = await api(`repos/${repository}/actions/workflows/${current.workflow_id}/runs?${query}`);
   for (const run of runs) {
@@ -72,11 +72,13 @@ export async function findHistory({ prefix, env = process.env }) {
 }
 
 /**
+ * Returns a required environment variable.
+ *
  * @param {NodeJS.ProcessEnv} env
  * @param {string} name
  * @returns {string}
  */
-function required(env, name) {
+export function requiredEnv(env, name) {
   const value = env[name];
   if (!value) throw new Error(`${name} is not set.`);
   return value;
