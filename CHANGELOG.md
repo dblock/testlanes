@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 (Next)
+
+- Your contribution here.
+
 ## 0.3.0 (2026/11/27)
 
 - [#17](https://github.com/dblock/testlanes/pull/17): Set up Node.js before detecting the package manager, so self-hosted and other runners without Node.js work - [@dblock](https://github.com/dblock).
